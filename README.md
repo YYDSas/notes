@@ -2,6 +2,10 @@
 
 一个纯前端静态笔记站，用 Markdown 写内容，GitHub Pages 免费托管。
 
+**线上地址：https://yydsas.github.io/notes/**
+
+仓库：https://github.com/YYDSas/notes
+
 ## 目录结构
 
 ```
@@ -26,6 +30,6 @@ notes-site/
 
 ## 部署状态
 
-- [ ] 已创建 GitHub 仓库
-- [ ] 已开启 GitHub Pages
-- [ ] 已完成首次推送
+- [x] 已创建 GitHub 仓库（YYDSas/notes）
+- [x] 已开启 GitHub Pages（main / root）
+- [x] 已完成首次推送并上线
