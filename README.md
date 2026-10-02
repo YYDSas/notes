@@ -6,15 +6,18 @@
 
 仓库：https://github.com/YYDSas/notes
 
+**本地目录：`E:\mynotes\notes-site`（唯一工作目录）**
+
 ## 目录结构
 
 ```
-notes-site/
+E:\mynotes\notes-site\
 ├── index.html          # 网站主体（外壳 + 样式 + 渲染逻辑，一般不用改）
 ├── 发布.bat            # 双击发布到 GitHub
 ├── 本地预览.bat        # 双击本地预览
 ├── 使用说明.md         # 详细操作指南
 ├── notes/              # 所有笔记内容
+│   ├── SystemVerilog/
 │   ├── 英语六级/
 │   └── 考研政治/
 └── assets/             # 图片等资源
@@ -33,3 +36,4 @@ notes-site/
 - [x] 已创建 GitHub 仓库（YYDSas/notes）
 - [x] 已开启 GitHub Pages（main / root）
 - [x] 已完成首次推送并上线
+- [x] 已迁移到 `E:\mynotes\notes-site`
