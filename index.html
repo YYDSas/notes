@@ -159,11 +159,14 @@ body{
    格式： { file: 'notes/分类/文件名.md', title: '标题', cat: '分类', tags: ['标签'], date: '2026-10-02' }
    ============================================================ */
 const NOTES = [
-  { file:'notes/SV错题本/代码书写类错误.md',  title:'错题本 · 代码书写类',  cat:'SV错题本', tags:['语法','笔误','检查清单'], date:'2026-10-02', order:1 },
-  { file:'notes/SV错题本/结构理解类错误.md',  title:'错题本 · 结构理解类',  cat:'SV错题本', tags:['概念','句柄','virtual','super'], date:'2026-10-02', order:2 },
+  { file:'notes/SystemVerilog/知识地图.md',    title:'SV · 知识地图',        cat:'SystemVerilog', tags:['目录','导航'], date:'2026-10-02', order:0 },
   { file:'notes/SystemVerilog/类与对象基础.md',      title:'SV · 类与对象基础',      cat:'SystemVerilog', tags:['类','对象','句柄','内存'], date:'2026-10-02', order:1 },
   { file:'notes/SystemVerilog/封装-local-protected.md', title:'SV · 封装 local / protected', cat:'SystemVerilog', tags:['封装','local','protected'], date:'2026-10-02', order:2 },
-  { file:'notes/SystemVerilog/继承与virtual方法.md', title:'SV · 继承与 virtual 方法', cat:'SystemVerilog', tags:['继承','virtual','clone','cast'], date:'2026-10-02', order:3 }
+  { file:'notes/SystemVerilog/继承与virtual方法.md', title:'SV · 继承与 virtual 方法', cat:'SystemVerilog', tags:['继承','virtual','clone','cast'], date:'2026-10-02', order:3 },
+  { file:'notes/SystemVerilog/类型转换与cast.md',   title:'SV · 类型转换与 $cast', cat:'SystemVerilog', tags:['cast','多态','句柄'], date:'2026-10-02', order:4 },
+  { file:'notes/SV错题本/索引.md',            title:'错题本 · 索引',        cat:'SV错题本', tags:['目录','排查','检查清单'], date:'2026-10-02', order:0 },
+  { file:'notes/SV错题本/代码书写类错误.md',  title:'错题本 · 代码书写类',  cat:'SV错题本', tags:['语法','笔误','检查清单'], date:'2026-10-02', order:1 },
+  { file:'notes/SV错题本/结构理解类错误.md',  title:'错题本 · 结构理解类',  cat:'SV错题本', tags:['概念','句柄','virtual','super'], date:'2026-10-02', order:2 }
 ];
 
 const SITE_NAME = '我的笔记';
@@ -181,6 +184,30 @@ function stripFrontMatter(text){
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------------- 双链支持：[[笔记标题]] ---------------- */
+/* 把 [[标题]] 或 [[标题|显示文字]] 转成可点击的站内链接。
+   标题匹配忽略空格，并把 / - _ 视为等同，所以
+   「SV · 封装 local / protected」与「SV · 封装 local-protected」都能匹配上。
+   代码块（``` 与 ` ）内容原样保留，不参与转换。 */
+function normTitle(s){
+  return String(s).replace(/\s+/g,'').replace(/[\/\-_]+/g,'-').toLowerCase();
+}
+function renderWikiLinks(md){
+  const byTitle = {};
+  NOTES.forEach(n => { byTitle[normTitle(n.title)] = n.file; });
+  const parts = md.split(/(```[\s\S]*?```|`[^`\n]*`)/);
+  return parts.map((seg, i) => {
+    if(i % 2 === 1) return seg;                       // 奇数段 = 代码，跳过
+    return seg.replace(/\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]/g, (m, t, label) => {
+      const key = t.trim();
+      const file = byTitle[normTitle(key)];
+      const text = (label || key).trim();
+      if(!file) return text;                          // 未匹配到，退化为纯文本
+      return '[' + text + '](#' + file + ')';
+    });
+  }).join('');
 }
 
 /* ---------------- 状态 ---------------- */
@@ -213,7 +240,7 @@ function renderNav(filter){
   const groups = groupByCategory(list);
   let html = '';
   Object.keys(groups).sort().forEach(cat => {
-    const items = groups[cat].slice().sort((a,b) => (a.order||99)-(b.order||99) || a.title.localeCompare(b.title,'zh'));
+    const items = groups[cat].slice().sort((a,b) => (a.order ?? 99)-(b.order ?? 99) || a.title.localeCompare(b.title,'zh'));
     const catId = 'cat-' + encodeURIComponent(cat).replace(/%/g,'');
     html += '<div class="nav-group">';
     html += '<div class="nav-cat" data-target="'+catId+'"><span>'+escapeHtml(cat)+' <span style="font-weight:400;opacity:.65;">'+items.length+'</span></span><span class="arrow">▼</span></div>';
@@ -261,7 +288,7 @@ async function loadNote(file){
       cache[file] = raw;
     }
     const body = stripFrontMatter(raw);
-    let html = marked.parse(body);
+    let html = marked.parse(renderWikiLinks(body));
 
     const tags = (meta.tags||[]).map(t => '<span class="tag">'+escapeHtml(t)+'</span>').join('');
     const head = '<h1>'+escapeHtml(meta.title)+'</h1>'
