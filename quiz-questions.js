@@ -552,5 +552,45 @@ window.QUIZ_QUESTIONS = [
   "cat": "仿真工具",
   "q": "Makefile 的三个坑是什么？\"学 Makefile 最有效的单一技巧\"是什么？",
   "a": "三个坑：\n① 命令行缩进【必须是 TAB】—— 用空格会报 missing separator；自检：awk '/^\\t/' Makefile\n② 【行尾注释会吃掉空格】—— VAR = value   # 注释 会让变量值里带上那串空格（make -n 能看见），拼出来的命令到处是多余空格 → 注释单独放一行\n③ 伪目标没声明 .PHONY —— 目录里恰好有同名文件时目标\"不执行\"\n最有效技巧：【make -n】只打印不执行 —— 想确认自己写对了没，用它当透视镜。\n另外 ?= 是\"没定义才赋值\"（所以命令行传入优先级最高），:= 立即展开，= 延迟展开。\n（覆盖率命令的关键顺序：save 必须在 run 之前 —— 同样是 $finish 吃 -do 那个坑。）"
+ },
+ {
+  "id": "errsilent-1",
+  "note": "notes/SV错题本/静默失败类错误.md",
+  "title": "错题本 · 静默失败类",
+  "cat": "SV错题本",
+  "q": "randomize() 失败（返回 0）时，rand 变量的值会变成什么？为什么这个现象特别容易被误判？怎么才能测准？",
+  "a": "【保持原值不变，不清零】。\n误判的根源：对象 new() 之后 rand 变量本来就是 0 —— 0 分不清\"被清零\"和\"根本没动\"。\n实测（哨兵值法）：先 p.length = 999，再制造约束冲突 → randomize() 返回 0，但 length 仍是 999。\n所以：① 测这类问题必须先用哨兵值（或先成功随一次）；② 绝不能依赖失败后的取值，只能判返回值。\n同类还有两个：get 失败时变量保持默认值、$cast 失败时目标句柄保持原值（而源为 null 时反而返回 1）。"
+ },
+ {
+  "id": "errsilent-2",
+  "note": "notes/SV错题本/静默失败类错误.md",
+  "title": "错题本 · 静默失败类",
+  "cat": "SV错题本",
+  "q": "config_db 的 get 取不到值时会出现什么现象？怎么把这种\"看不见的失败\"变成看得见的？日志要怎么写才算有证据力？",
+  "a": "现象：get 返回 0，目标变量【保持默认值】，不报错 —— 看起来像\"取到了，值本来就是默认那个\"。\n三条对策：\n① 判返回值：if (!uvm_config_db#(int)::get(this,\"\",\"cfg_val\",cfg_val)) `uvm_error(\"CFG\",\"cfg_val not found\")\n② 日志里打【值】，不是固定字符串：`uvm_info(\"BUILD\", $sformatf(\"cfg_val = %0d\", cfg_val), UVM_LOW)\n③ 验收标准写成可核对的数字（\"打印出 cfg_val = 42\"），而不是\"有没有那条消息\"。\n取不到的常见原因：set/get 拼出的作用域字符串不一致（实例名 vs 类名）、field_name 写错。"
+ },
+ {
+  "id": "errsilent-3",
+  "note": "notes/SV错题本/静默失败类错误.md",
+  "title": "错题本 · 静默失败类",
+  "cat": "SV错题本",
+  "q": "覆盖率报告里某个 covergroup 显示 0.00%，有哪两种完全不同的成因？看到全 0 时第一件事该做什么？",
+  "a": "两种成因：\n① 【压根没被采样】：漏 new()、漏 sample()、或者承载它的组件根本没被创建；\n② 【真的没覆盖到】：这次激励打不到那些 bin。\n报告本身不区分二者 —— 所以看到全 0，第一件事是【先确认它有没有被采样】，再谈覆盖够不够。\n区分手段：看日志里有没有采样痕迹；做破坏性实验（把 sample() 注释掉再跑一遍对比）。\n注意两种\"空\"不一样：漏 new() 又去 sample() 是空句柄操作（通常报错/崩），真正【静默】的是\"没人调用 sample()\"或\"组件从未被创建\"。\n另外：rand 动态数组不约束 size 时 randomize() 返回 1 但 size=0，会让长度相关的 bin 全 0 —— 同样是静默失败。"
+ },
+ {
+  "id": "errcode-4",
+  "note": "notes/SV错题本/代码书写类错误.md",
+  "title": "错题本 · 代码书写类",
+  "cat": "SV错题本",
+  "q": "默写 UVM 环境时最容易漏的那类\"框架级\"书写错有哪些？（骨架、factory 创建、宏参数、objection 各说一条）",
+  "a": "① 骨架不配对：class 没有 endclass、module 没有 endmodule → 后面的类被当成嵌套类，报错位置莫名其妙。五对括号（package/class/covergroup/module/begin）写完立刻配对。\n② factory 创建写成作用域解析的样子：my_com::creat::type_id::(\"my_com\",this) ❌ → 正确三层记法：类名::type_id::create(\"实例名\", parent)。\n③ `uvm_info 少参数：宏要【三个】参数（ID, MSG, VERBOSITY），少参数时编译器报的是宏实参个数问题，不会提示\"你少了消息字符串\"。\n④ objection 当成独立函数：raise_objection(this) ❌ → phase.raise_objection(this) ✅，并与 drop_objection 配对。\n（另：SV 不支持函数重载，同类里同名函数写两遍就是重复定义；运行命令里的顶层名要与模块名一致。）"
+ },
+ {
+  "id": "errstruct-4",
+  "note": "notes/SV错题本/结构理解类错误.md",
+  "title": "错题本 · 结构理解类",
+  "cat": "SV错题本",
+  "q": "uvm_config_db 的 set 和 get 要\"三个寻址参数一致\"，这里的\"名字\"到底指什么？类名和实例名分别决定什么？",
+  "a": "指的是【实例名】—— create(\"m_comp\", parent) 的第一个参数，它决定组件在层次树里叫什么（uvm_test_top.m_comp）。\n对照：\n· 类名（class my_comp）→ 创建出来是哪【种】对象，也是 factory override 的靶子；\n· 实例名（create 的第 1 个参数）→ 它在层次树里的【位置/名字】；\n· 句柄变量名（my_comp m_comp;）→ 只是你在代码里引用它用的名字，不影响路径。\nconfig_db 拼作用域用的是实例名：set(this,\"m_comp\",…) 在 my_test 里 → \"uvm_test_top.m_comp\"；get(this,\"\",…) 在 my_comp 里 → inst_name 为空 ⇒ 取自己全名 → 同样一串 ✅。\n若两边不一致 → get 静默失败、变量保持默认值。\n另外：前三个参数是\"给谁\"，第四个参数才是\"给什么\"—— 只盯寻址一致，容易忘了检查值本身对不对。"
  }
 ];
