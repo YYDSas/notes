@@ -34,6 +34,16 @@ body{
   transition:border-color .15s, box-shadow .15s;
 }
 .search-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+.quiz-entry{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:0 16px 12px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;
+  background:var(--accent-soft);color:var(--accent);text-decoration:none;
+  font-size:14px;font-weight:500;transition:border-color .15s;
+}
+.quiz-entry:hover{border-color:var(--accent);}
+.quiz-entry .due{font-size:12px;font-weight:600;background:var(--accent);color:#fff;
+  border-radius:999px;padding:1px 8px;flex-shrink:0;}
+.quiz-entry .due.hide{display:none;}
 .nav{flex:1;overflow-y:auto;padding:0 12px 24px;}
 .nav::-webkit-scrollbar{width:6px;}
 .nav::-webkit-scrollbar-thumb{background:#dcdbd6;border-radius:3px;}
@@ -135,6 +145,7 @@ body{
     <div class="sidebar-head">
       <div class="site-title"><span class="dot"></span><span id="siteName">我的笔记</span></div>
     </div>
+    <a class="quiz-entry" href="quiz.html"><span>自测复习</span><span class="due hide" id="quizDue"></span></a>
     <div class="search-box">
       <input type="search" id="searchInput" placeholder="搜索笔记内容…" autocomplete="off">
     </div>
@@ -379,6 +390,23 @@ function route(){
 }
 window.addEventListener('hashchange', route);
 route();
+
+/* ---------------- 侧边栏「自测复习」角标：今日待复习题数 ---------------- */
+/* 题数直接由本地进度推算，不需要加载题库，所以不影响笔记页的打开速度。
+   待复习 = 全部题 - 那些"到期日在今天之后"的题。 */
+(function(){
+  const el = document.getElementById('quizDue');
+  if(!el) return;
+  try{
+    const db = JSON.parse(localStorage.getItem('notesQuizV1') || 'null');
+    if(!db || !db.s || !db.t) return;                 // 还没开始自测，不显示数字
+    const d = new Date();
+    const t = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const dueLater = Object.keys(db.s).filter(k => db.s[k] && db.s[k].d > t).length;
+    const due = db.t - dueLater;
+    if(due > 0){ el.textContent = due; el.classList.remove('hide'); }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
