@@ -150,6 +150,9 @@ endtask
 - `finish_item` → 把 req 交给 driver，并**阻塞到 `item_done`**
 - 一个 sequencer 上可以挂多个 sequence，由仲裁器决定顺序（默认 FIFO，可设 `set_arbitration`）
 
+> **握手细节（`item` 参数为什么必填、`get_next_item` 为什么只 peek 不弹、4 个阻塞点分别在哪）单独成篇：
+> 见 [[UVM · driver 与 sequence 的握手]]。**
+
 ## 六、uvm_sequence_library 与 RANDC 模式
 
 `uvm_sequence_library` 是一组 sequence 的"库"，可按策略自动挑一个来跑：

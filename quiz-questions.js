@@ -592,5 +592,37 @@ window.QUIZ_QUESTIONS = [
   "cat": "SV错题本",
   "q": "uvm_config_db 的 set 和 get 要\"三个寻址参数一致\"，这里的\"名字\"到底指什么？类名和实例名分别决定什么？",
   "a": "指的是【实例名】—— create(\"m_comp\", parent) 的第一个参数，它决定组件在层次树里叫什么（uvm_test_top.m_comp）。\n对照：\n· 类名（class my_comp）→ 创建出来是哪【种】对象，也是 factory override 的靶子；\n· 实例名（create 的第 1 个参数）→ 它在层次树里的【位置/名字】；\n· 句柄变量名（my_comp m_comp;）→ 只是你在代码里引用它用的名字，不影响路径。\nconfig_db 拼作用域用的是实例名：set(this,\"m_comp\",…) 在 my_test 里 → \"uvm_test_top.m_comp\"；get(this,\"\",…) 在 my_comp 里 → inst_name 为空 ⇒ 取自己全名 → 同样一串 ✅。\n若两边不一致 → get 静默失败、变量保持默认值。\n另外：前三个参数是\"给谁\"，第四个参数才是\"给什么\"—— 只盯寻址一致，容易忘了检查值本身对不对。"
+ },
+ {
+  "id": "uvmhand-1",
+  "note": "notes/UVM/driver与sequence的握手.md",
+  "title": "UVM · driver 与 sequence 的握手",
+  "cat": "UVM",
+  "q": "一次 request/response 的握手里，自己写的代码中只有 4 行会阻塞，分别是哪 4 行？各自卡到什么时候才放行？",
+  "a": "① sequence 的 start_item(req)：等 driver 的 get_next_item 来认领；\n② sequence 的 finish_item(req)：等 driver 调 item_done() / item_done(rsp)；\n③ sequence 的 get_response(got)：等 driver 的 item_done(rsp)（driver 不回就永远卡）；\n④ driver 的 get_next_item(req)：等 sequence 的 finish_item 把件送上来。\n除这 4 行以外，其余都是零时间走过去的。\n两边是独立进程，靠这 4 行互相踩刹车 —— 所以日志里 [DRV] 与 [SEQ] 的时间戳一定【交错】出现，不可能各跑各的。\n记忆锚点：这是\"应用者视角\"的路线，先记这 4 个点，再往下看源码。"
+ },
+ {
+  "id": "uvmhand-2",
+  "note": "notes/UVM/driver与sequence的握手.md",
+  "title": "UVM · driver 与 sequence 的握手",
+  "cat": "UVM",
+  "q": "get_next_item 和 item_done 内部各自用 fifo 的哪个操作？这个\"分工\"带来哪些推论？",
+  "a": "get_next_item 用 m_req_fifo.peek(t) —— 【只看不弹出】；item_done 用 m_req_fifo.try_get(t) —— 【这里才真正弹出】。\n所以它俩是一个 peek/get 对，不是一个函数干一半。\n推论：\n① 一次 get_next_item 必须配一次 item_done，否则队列不清；\n② 忘写 item_done 时，下一次 get_next_item 会先报 \"Get_next_item called twice without item_done or get in between\"，然后因为队首还是那一件，peek 又拿到【同一个 item】；\n③ get() = peek + item_done（一步到位），所以【用了 get 就不能再写 item_done】，否则 try_get 失败 → UVM_FATAL \"Item_done() called with no outstanding requests\"。\n另一个后果：peek 返回的是句柄不是副本，在 driver 里改 req.xxx 会改到 sequence 手里同一个对象。"
+ },
+ {
+  "id": "uvmhand-3",
+  "note": "notes/UVM/driver与sequence的握手.md",
+  "title": "UVM · driver 与 sequence 的握手",
+  "cat": "UVM",
+  "q": "start_item 的 item 参数能不能省？finish_item 为什么必须传同一个 req？",
+  "a": "不 能省。签名是 start_item(uvm_sequence_item item, int set_priority = -1, uvm_sequencer_base sequencer = null)，item 【没有默认值】，写 start_item() 直接编译报错；能省的只有后两个参数，start_item(req) 等价于 start_item(req, -1, null)。\n必须同一个 req 的原因：\n· start_item 内部做了 item.set_item_context(this, sequencer)，把\"发件人\"和目的地记在 item 上；\n· finish_item 开头是 sequencer = item.get_sequencer()，从 item 上把 sequencer 取回来。\n传两个不同对象 → 第二个从没 set_item_context 过 → get_sequencer() 得到 null → UVM_FATAL \"STRITM sequence_item has null sequencer\"。\n还有一条更重要的：item 决定【回信回给谁】—— put_response 靠 item 上的 sequence_id 找回原 sequence，所以 rsp 必须 set_id_info(req)，否则报 [SQRPUT] null sequence_id。\n补充：item 还是最终被 driver 取走的那件东西（send_request 直接把它 put 进 fifo）。"
+ },
+ {
+  "id": "uvmhand-4",
+  "note": "notes/UVM/driver与sequence的握手.md",
+  "title": "UVM · driver 与 sequence 的握手",
+  "cat": "UVM",
+  "q": "driver 忘了写 item_done()，仿真会是什么现象？为什么看起来\"没死\"？",
+  "a": "仿真【永不结束】—— run -all 跑不完，只能超时 kill 或 Ctrl+C。\n实测表现：\n· sequence 只打印 1 次就卡死在 finish_item（内部的 wait_for_item_done 等不到唤醒）；\n· driver 反而在\"空转同一件 item\" —— 因为 get_next_item 用的是 peek，从不弹出，所以每轮拿到的都是同一件；\n· 同时狂刷 \"Get_next_item called twice without item_done or get in between\"。\n为什么看起来\"没死\"：driver 里的 #10 仍在推进仿真时间，所以时间在走、日志在刷，只是永远结束不了。\n关键认知：真正停摆的是 【sequence】，driver 侧是在空转。\n排查手段：在 forever 内外两侧打 $display 时间戳（标签用纯 ASCII）。"
  }
 ];

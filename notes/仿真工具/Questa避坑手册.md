@@ -37,6 +37,8 @@ vsim -c -L mtiUvm +UVM_TESTNAME=my_test work.tb -do "run -all; quit -f"
 | `vlog-13053 Illegal base specifier in numeric constant` | `` `timescale `` 的反引号打成了单引号 |
 | `vlog-13300`/`vlog-13114` … | 带 `ref` 形参的函数/任务**必须 `automatic`**；function phase 里不能放 `#` 延时 |
 | 数字基数写错（`8'dA1` / `8'C3` / 丢掉基数） | 基数与数值要匹配，这是新手高频错 |
+| `(vlog-2570) Zero-length range with constant bounds. Low-bound and high-bound may be reversed.` | **`inside` / `bins` 里写了降序区间**（如 `{[3:0]}`）。只给 **Warning**，但 `randomize()` 会因此失败、覆盖率仓也会塌掉 → 一律改升序 `{[0:3]}` |
+| `(vsim-3971) $cast to type 'class X' from 'class Y' failed` | 语句形式的 `$cast` 失败会**硬报错**；写成 `void'($cast(...))` 则完全静默 |
 
 > **重要**：`vlog` **不报语义错误**——很多问题要到 `vsim` 的 **vopt 阶段**才暴露
 > （`vopt-7063` / `vopt-2123` 等）。**"vlog 通过"不等于能跑。**
@@ -52,6 +54,7 @@ vsim -c -L mtiUvm +UVM_TESTNAME=my_test work.tb -do "run -all; quit -f"
 | `vopt-7063 Failed to find 'xdisplay'` | 没有 `xdisplay` 这个任务，只有 `$display` 等 |
 | SIGSEGV 崩溃 | 多为空句柄访问；崩溃后当前目录会留 `vsim_stacktrace.vstf` + `transcript`，收尾要清 |
 | 常量越界访问静默通过 | Questa 对固定尺寸非打包数组的**常量**越界不报错 → 用 `foreach` / `$size()` 自保 |
+| **仿真永不结束**（`run -all` 跑不完，只能 Ctrl+C / 超时 kill） | UVM 握手少了一步。最常见是 **driver 忘了 `item_done()`**。实测表现：sequence 只打印 1 次就卡死在 `finish_item`，而 driver 在**空转同一件 item**（因为 `get_next_item` 内部是 `peek`，从不弹出），并狂刷 `Get_next_item called twice without item_done or get in between`；仿真时间仍在走，所以看起来"没死"。详见 [[UVM · driver 与 sequence 的握手]] |
 
 ## 四、覆盖率流程（★ 核心坑）
 

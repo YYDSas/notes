@@ -140,6 +140,63 @@ c.data = this.data;    // data 是动态数组 → 赋的是【句柄】
 c.data = new[this.data.size()](this.data);
 ```
 
+## 六、virtual vs 非 virtual：调用到底"看"谁（讲义情景一）
+
+```systemverilog
+class bird;
+  virtual function void hungry();  $display("I am bird, I am hungry");   endfunction
+  function void hungry2();         $display("I am bird, I am hungry2");  endfunction
+endclass
+
+class parrot extends bird;
+  virtual function void hungry();  $display("I am parrot, I am hungry");  endfunction
+  function void hungry2();         $display("I am parrot, I am hungry2"); endfunction
+endclass
+```
+
+**情景一**：`A = new(); B = new(); A = B;`
+
+> ⚠️ `A = B` 之后，`A` 的**声明类型仍然是 `bird`**，但它**实际指向一个 `parrot` 对象** —— 这种"句柄类型 ≠ 对象类型"的状态，就是下面差异的来源。
+
+| 调用 | 句柄声明类型 | 实际指向的对象 | 选方法的依据 | 输出 |
+| --- | --- | --- | --- | --- |
+| `A.hungry()` | bird | **parrot** | virtual → **看对象** | `I am parrot, I am hungry` |
+| `B.hungry()` | parrot | parrot | virtual → 看对象 | `I am parrot, I am hungry` |
+| `A.hungry2()` | bird | **parrot** | 非 virtual → **看句柄** | **`I am bird, I am hungry2`** |
+| `B.hungry2()` | parrot | parrot | 非 virtual → 看句柄 | `I am parrot, I am hungry2` |
+
+**第 3 行是重点**：对象明明是 parrot，`A.hungry2()` 却打印 `I am bird`。
+
+| | `virtual` 方法 | 非 `virtual` 方法 |
+| --- | --- | --- |
+| 何时决定调谁 | **运行期** | **编译期** |
+| 依据 | 句柄指向的**对象真实类型** | 句柄的**声明类型** |
+| 术语 | 动态绑定（多态） | 静态绑定 |
+
+非 virtual 为什么会"打回原形"：编译器看到 `A` 声明成 `bird`，就把调用地址**钉死**在 `bird::hungry2` 上；运行期即使对象换成了 parrot，它也不再回头看一眼。
+
+### 一句话对照
+
+**`virtual` 让调用看"对象"；非 `virtual` 让调用看"句柄"。**
+
+### 这对 UVM 意味着什么
+
+UVM 框架手里永远只有**基类句柄**：
+
+```systemverilog
+uvm_component comps[$];                            // 全是基类句柄
+foreach (comps[i]) comps[i].run_phase(phase);      // 框架这样调你的 driver
+```
+
+你写的是 `class chnl_driver extends uvm_driver`，但框架拿到的是 `uvm_component`。
+**如果 `run_phase` 不是 virtual，框架调的永远是基类那份空实现 —— 你写的 `run_phase` 一行都不会执行。**
+
+- `build_phase` / `connect_phase` / `run_phase` / `report_phase` —— 全是 virtual
+- `uvm_sequence::body()` —— virtual；`seq.start(s)` 内部只有 `uvm_sequence_base` 句柄，靠它才调到你的 `body()`
+- **factory override 也必须配合 virtual 才有意义**：override 换掉的是实例化的类型，是 virtual 保证调用落到新类型的实现上
+
+> **推论**：如果你 override 了一个方法却"没生效"，第一件事是检查**父类里那个方法有没有 `virtual`**。
+
 ## 相关笔记
 
 - [[SV · 类与对象基础]]
