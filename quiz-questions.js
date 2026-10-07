@@ -624,5 +624,69 @@ window.QUIZ_QUESTIONS = [
   "cat": "UVM",
   "q": "driver 忘了写 item_done()，仿真会是什么现象？为什么看起来\"没死\"？",
   "a": "仿真【永不结束】—— run -all 跑不完，只能超时 kill 或 Ctrl+C。\n实测表现：\n· sequence 只打印 1 次就卡死在 finish_item（内部的 wait_for_item_done 等不到唤醒）；\n· driver 反而在\"空转同一件 item\" —— 因为 get_next_item 用的是 peek，从不弹出，所以每轮拿到的都是同一件；\n· 同时狂刷 \"Get_next_item called twice without item_done or get in between\"。\n为什么看起来\"没死\"：driver 里的 #10 仍在推进仿真时间，所以时间在走、日志在刷，只是永远结束不了。\n关键认知：真正停摆的是 【sequence】，driver 侧是在空转。\n排查手段：在 forever 内外两侧打 $display 时间戳（标签用纯 ASCII）。"
+ },
+ {
+  "id": "force-1",
+  "note": "notes/SystemVerilog/force与侵入式赋值.md",
+  "title": "SV · force 与侵入式赋值",
+  "cat": "SystemVerilog",
+  "q": "force 期间，设计自己对这个信号的驱动还有效吗？日志上会看到什么？",
+  "a": "完全无效 —— 设计侧的驱动被盖住，只有 TB 的 force 说了算。\n实测：设计里 rkv_mod 本来每 5ns 让 out_p0 加 1（0、1、2、3…），被 force 到接口的 d0 之后，日志全是 TB 灌的值 1、2、4、8。\n另一个观察：m0.out_p0 就是 m1.in_p0（同一根线），所以 force 一处会\"顺带\"改掉下游模块的输入 —— 这就是\"侵入式\"的传染效果。\n驱动权直到 release 才会还给设计。"
+ },
+ {
+  "id": "force-2",
+  "note": "notes/SystemVerilog/force与侵入式赋值.md",
+  "title": "SV · force 与侵入式赋值",
+  "cat": "SystemVerilog",
+  "q": "`force sig = src;` 只执行了一次，之后 src 变了，sig 会跟着变吗？为什么？",
+  "a": "会跟着变。\nforce 的学名是【过程性连续赋值】（procedural continuous assignment）：force 生效期间，目标变量由这条赋值【持续】驱动，右侧表达式一变它就更新，不需要重新执行 force。\n实测：`initial #1 force sig = src;` 只执行一次，t=17 时 sig 已经跟着 src 涨到 3。\n推论：把 force 放进 always_comb 里，和\"只执行一次\"，输出逐行一致 —— always_comb 不是必需的。\n只有 `release` 才把驱动权还回去。"
+ },
+ {
+  "id": "force-3",
+  "note": "notes/SystemVerilog/force与侵入式赋值.md",
+  "title": "SV · force 与侵入式赋值",
+  "cat": "SystemVerilog",
+  "q": "force / freeze / deposit 三者在\"驱动权\"上有什么不同？",
+  "a": "· `force lhs = expr;`（SV 语句）——长期占用，右侧变化自动跟随，直到 release；\n· VCS 命令 `force -freeze` ——长期冻结，等价于\"永不 release\"；\n· VCS 命令 `force -deposit` ——只灌一次值，之后设计仍可驱动它。\n书里那个例子【没有写 release】→ 设计永远拿不回驱动权，属于最坏情形。"
+ },
+ {
+  "id": "force-4",
+  "note": "notes/SystemVerilog/force与侵入式赋值.md",
+  "title": "SV · force 与侵入式赋值",
+  "cat": "SystemVerilog",
+  "q": "用 force 调试时，收尾最容易忘什么？为什么危险？",
+  "a": "最容易忘 `release`。\n后果一：驱动权不归还 —— 该信号（及其下游）永远由 TB 说了算，后面所有用例都被污染。\n后果二：force 期间设计的逻辑\"沉默\"，【协议检查、覆盖率、时序关系全部失真】，所以不能长期挂着跑回归。\n另外两个坑：跨层次路径名（top.m0.out_p0）依赖层次结构，改名/工具优化后会失效（工程上配合 bind 或统一层次引用管理）；对时钟、复位 force 要格外小心，可能造出物理上不可能的时序。\n（附带：书上代码 `task drive(ref ...)` 在本机 Questa 编不过，ref 形参必须 automatic。）"
+ },
+ {
+  "id": "configlib-1",
+  "note": "notes/仿真工具/Verilog-config与库绑定.md",
+  "title": "仿真工具 · Verilog config 与库绑定",
+  "cat": "仿真工具",
+  "q": "同一个模块名在 work 和 tblib 两个库里各有实现，跑仿真时凭什么决定用哪一个？",
+  "a": "靠 Verilog 的 config（配置声明）—— 它就是\"库绑定的裁决书\"。\n三个子句分工：`design work.top;` 指定管辖的顶层；`default liblist work;` 给默认的库搜索列表（顺序=优先级）；`instance <层次路径> liblist tblib;` 给某个实例的特例绑定。\n实测：`vsim -c cfg1` → This is m2（全从 work 取）；`vsim -c cfg2` → This is dummy m2（只有 top.m1_inst.m2_inst 改从 tblib 取）。同一份编译结果、源码一行不改。"
+ },
+ {
+  "id": "configlib-2",
+  "note": "notes/仿真工具/Verilog-config与库绑定.md",
+  "title": "仿真工具 · Verilog config 与库绑定",
+  "cat": "仿真工具",
+  "q": "config 里的 `design work.top;` 和 `default liblist work;` 分别管什么？",
+  "a": "`design <库名>.<单元名>` —— 【管谁】：这份配置适用于哪个顶层设计（注意它不是\"从哪取模块\"）。\n`default liblist <库...>` —— 【默认去哪找】：顶层树里所有没被单独指定的实例，都按这个列表的顺序去库里搜同名模块。\n只写这两句的配置，作用就是\"把整棵树的模块解析固定在一个库\"（cfg1 就是这种）。\n此外还有 `instance <层次路径> liblist`（按实例覆盖）与 `cell <模块名> liblist`（按模块类型覆盖）。"
+ },
+ {
+  "id": "configlib-3",
+  "note": "notes/仿真工具/Verilog-config与库绑定.md",
+  "title": "仿真工具 · Verilog config 与库绑定",
+  "cat": "仿真工具",
+  "q": "Verilog config 和 UVM factory override 都是\"换实现\"，区别在哪？",
+  "a": "换的对象和时机不同：\n· UVM factory override：换【验证组件】的实现，在【运行期】生效（create 时查表，所以必须在 create 之前设置）；\n· Verilog config：换【设计模块】的实现（从哪个库取同名模块），在【编译/链接期】生效，运行时改不了。\n两者是同一思路在两个层次上的对应物：TB 侧用 factory，设计侧用 config。\n前提：两份实现【模块名相同、端口/参数兼容】，否则链接时报端口不匹配。\n（小工程只有一份源码时，一辈子用不到 config。）"
+ },
+ {
+  "id": "phasejmp-1",
+  "note": "notes/UVM/相位与域.md",
+  "title": "UVM · 相位与域",
+  "cat": "UVM",
+  "q": "写 reset 跳转时，`main_phase` 里为什么要用 `fork ... join_any` + `disable fork`？",
+  "a": "为了让【主激励】和【盯 reset / 发起跳转】并行，同时又能在跳转时干净收场。\n· fork 出两条线程：① repeat(3) 的正常激励；② 满足条件时调用 phase.jump(uvm_reset_phase::get())；\n· join_any：任一分支结束就继续（不等另一条）；\n· disable fork：★ 把另一条还在跑的线程掐掉 —— 否则它会继续持 objection、继续打激励，跳转后行为就乱了。\n另外：jump 是域级操作，只应由【一个】协调者（专门的 reset 监听组件）发起，多个组件同时调会重复触发。\n实测（ts_sim/tb_phase_jump.sv）：两轮 reset→configure→main，一次 [PH_JUMP]，0 error 0 fatal；代码里 #1ns 在 jump 之前，那 1ns 是代码自己的等待，不是 jump 的延迟。"
  }
 ];
