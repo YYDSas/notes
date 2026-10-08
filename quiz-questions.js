@@ -1049,4 +1049,166 @@ window.QUIZ_QUESTIONS = [
  "q": "scoreboard 到底怎么写的？怎么比较数据的？",
  "a": "四步：\n① 数据从哪来：monitor → analysis_port → scb 的 analysis_imp；reference model 自己产生期望值\n② 比什么：逐字段比（address/data/len），或用 field_automation 的 compare\n③ 怎么处理顺序：队列/fifo 按【时间戳】对齐，或用 uvm_event/mailbox 同步\n④ 不一致时：$error 打印不一致字段 + transaction 快照，然后从波形定位到对应时间段\n加分点：说明为什么要加时间戳字段 —— 因为 driver 发出和 monitor 采回之间有延迟，没有时间戳就没法严格配对。\n★ 只说\"用队列比一下\"是不够的，要说清【期望值从哪来、怎么配对、失败怎么定位】。"
 }
+,
+ {
+  "id": "veng-kuj-1",
+  "note": "notes/验证工程/骨架速记.md",
+  "title": "验证工程 · 骨架速记",
+  "cat": "验证工程",
+  "q": "不看笔记，把一个 UVM 环境的八股结构默画出来（一共几层、每层有哪些文件、哪个文件占工作量最大）",
+  "a": "八股：\n① tb_top：时钟 + 例化 DUT + 塞 vif + run_test()\n② interface：信号 + clocking + 协议 task ← 30% 工作量\n③ agent（一个接口一个）：seq_item / sequencer / driver / monitor / agent_config / agent / coverage_collector\n④ seq_item：一个 item = 一次完整事务\n⑤ driver（最简单）+ monitor（最难）\n⑥ env：env_config / scoreboard（20% 工作量）/ env\n⑦ sequence_lib：base_seq + 5~15 个场景\n⑧ test_lib：base_test + 各 test\n★★ 工作量：interface 30%、monitor 25%、scoreboard 20%、覆盖率 10%、sequence 10%、其他 5%。\n★ 三个口诀：一个接口=一个 agent；一个 item=一次完整事务；一个 test=一个场景+一组配置。"
+ },
+ {
+  "id": "veng-kuj-2",
+  "note": "notes/验证工程/骨架速记.md",
+  "title": "验证工程 · 骨架速记",
+  "cat": "验证工程",
+  "q": "为什么 base_test 的 super.build_phase() 必须放最后？放前面会怎样？",
+  "a": "因为 env 的 build_phase 由 UVM 在 test 的 build_phase【返回之后】才执行。\n放开头 → 等于让子组件先 build → 而此时 config_db 里还没有 AGENT_CFG → agent 拿不到配置就 fatal（报 [AGT_CFG] Cannot get ...）。\n正确顺序：配置先行 → 全部 set 完 → 最后一行 super.build_phase()。\n★★ 对比记忆：super.build_phase() 要放【最后】，super.run_phase() 【根本不要写】（run_phase 是阻塞 task，自己调 = 自己死等自己）。这两个是不同的坑。"
+ },
+ {
+  "id": "veng-kuj-3",
+  "note": "notes/验证工程/骨架速记.md",
+  "title": "验证工程 · 骨架速记",
+  "cat": "验证工程",
+  "q": "拿到一个 RTL 之后，搭 UVM 环境的 7 步顺序是什么？其中第 2.5 步是什么、为什么不能跳？",
+  "a": "1 defines 列 parameter 宏\n2 global_pkg + interface + tb_top 例化 DUT\n2.5 ★★ 写纯 SV 冒烟测试（20 行，不含 UVM）\n3 seq_item + agent_config + sequencer + monitor（monitor 先跑通）\n4 driver\n5 scoreboard 参考模型\n6 base_test + 各 seq + 各 test\n7 covergroup bins\n★★ 第 2.5 步的价值只有一个：【分清\"RTL 错了\"还是\"VIP 错了\"】。\n实测回报：3 个 RTL bug（FIFO 指针宽度、READY 依赖组合逻辑、标志清零不同拍）全部靠冒烟测试 10 分钟内定位；直接上 UVM 会误判成\"VIP 写错\"，绕几小时。\n★ 为什么 monitor 先于 driver：monitor 只观察，跑通它说明 interface 和采样没问题；先写 driver 的话采样和时序两个问题缠在一起，定位成本翻倍。"
+ },
+ {
+  "id": "veng-kuj-4",
+  "note": "notes/验证工程/骨架速记.md",
+  "title": "验证工程 · 骨架速记",
+  "cat": "验证工程",
+  "q": "列出你知道的\"不报错但结果是错的\"的静默失败例子（工程层面）",
+  "a": "7 个（都是仿真跑完了、不报 fatal、不中断）：\n① ★★★ sequence 直接调 intf.axi_write() → driven: 0 wr / 0 rd，验证完全空跑\n② ★★★ recv_b 只等 bvalid 不等 bready → 单场景全绿，regress 死锁到看门狗\n③ ★★★ monitor 复位期就采集 → 报激励里根本没发生的读（DUT 输出是 X）\n④ ★★★ monitor 采样 TB 驱动侧信号走了 clocking → 12 条 vsim-8441 + 静默采不到值\n⑤ ★★★ monitor 用 fork...join 汇合多个 forever → 统计全 0\n⑥ ★★ 约束漏 local:: → 恒真约束，写读地址对不上，像 scoreboard 的错\n⑦ ★★ 影子模型场景间没重置 → 假 mismatch，像 RTL bug\n★ 共同点：只能靠看 SB_SUMMARY 的 driven / compared 数字对不对才能发现。养成习惯：看到 0 mismatches 先确认 driven 和 compared 不是 0。"
+ },
+ {
+  "id": "veng-if-1",
+  "note": "notes/验证工程/interface与协议封装.md",
+  "title": "验证工程 · interface与协议封装",
+  "cat": "验证工程",
+  "q": "interface 里信号的方向怎么定？为什么不能照抄 RTL 的端口方向？",
+  "a": "判据是【谁驱动】，不是照抄 RTL 端口。\n· TB 驱动（我要送出去的）→ logic\n· DUT 驱动（我要收回来的）→ wire\n为什么不能照抄：AXI4-Lite 从设备的 rd_en 在 RTL 里是【输入】（从设备要读数据），但对 TB 来说它是【stimulus】（我要发起一次读）→ 必须写 logic。\n★ 实测踩过：照抄写成 wire，reset_if() 里给它赋值 → vlog-2110 Illegal reference to net，而报错在 interface 里，第一反应会以为是 clocking 写错。\n★ 还要注意：clocking 块里的方向必须与顶层声明一致，否则 vlog-2224。"
+ },
+ {
+  "id": "veng-if-2",
+  "note": "notes/验证工程/interface与协议封装.md",
+  "title": "验证工程 · interface与协议封装",
+  "cat": "验证工程",
+  "q": "monitor 采样时，哪些信号可以直接读接口、哪些必须走 clocking？写错了会怎样？",
+  "a": "按方向分：\n· TB 驱动侧（VALID / ADDR / DATA / STRB / READY 由 TB 发）→ 直接读 intf.xxx\n· DUT 驱动侧（READY / VALID / DATA / RESP 由 DUT 发）→ 走 intf.cb.xxx\n写错的后果是【静默失效】：写 intf.cb.awvalid（output 方向）→ 报 12 条 vsim-8441 Clocking block output not legal in this context，但【不中断仿真，只是采不到值】→ monitor 一个 item 都不发 → scoreboard 统计全 0。\n★ 这是最危险的一类错误：不报 fatal，看起来\"跑完了\"，实际什么都没验。"
+ },
+ {
+  "id": "veng-if-3",
+  "note": "notes/验证工程/interface与协议封装.md",
+  "title": "验证工程 · interface与协议封装",
+  "cat": "验证工程",
+  "q": "为什么协议握手必须封成 interface 里的 task，而不是写在 driver 里？封装到什么程度算够？",
+  "a": "因为 driver 里出现 @(cb) 和 if 就说明封装失败了。\n自检方法：把 driver 的 drive_item 读完，如果里面还有时钟沿控制或握手判断，说明波形逻辑没封干净。\n封好的样子：drive_item 里只剩 case 分支调 intf.axi_write(addr, data, strb, resp)。\n★ 收益不只是代码短：① 改协议时序只改 interface 一处 ② driver 只关心\"发什么激励\"不关心\"怎么打时序\" ③ 波形一眼看懂，方便 debug。\n★ 组合事务内部要【顺序发】不要 fork...join：实测两个进程同时操作同一 clocking block 会让 output skew 语义打架 → recv_b 永久阻塞 → 死锁到看门狗。"
+ },
+ {
+  "id": "veng-if-4",
+  "note": "notes/验证工程/interface与协议封装.md",
+  "title": "验证工程 · interface与协议封装",
+  "cat": "验证工程",
+  "q": "recv_b 这类等待响应的 task，握手条件和超时保护要怎么写？为什么？",
+  "a": "两个要点：\n① 握手条件要等 【valid && ready】两个，不能只等 valid\n   ❌ do @(cb); while (!cb.bvalid);\n   ✅ do @(cb); while (!(cb.bvalid && bready) && (guard++ < 1000));\n② 必须加超时保护，guard 到上限就打印现场（bvalid/awready 等）\n★ 只等 valid 的症状：单场景全绿，串进 regress 后死等 bvalid 到看门狗（因为 bready 拉高前 bvalid 可能已置位一拍，会在错误的拍退出）。\n★ 超时的价值：死等时只有全局看门狗（2ms）兜底，丢掉全部现场；加了超时才能看到\"bvalid=0 awready=1\"这种有用信息。\n★ 注意：interface 内部引用信号直接写名字，不能写 intf.xxx（intf 在 interface 内不存在 → vopt-7063）；超时打印用纯 ASCII，中文会乱码。"
+ },
+ {
+  "id": "veng-dm-1",
+  "note": "notes/验证工程/driver与monitor的实现要点.md",
+  "title": "验证工程 · driver与monitor的实现要点",
+  "cat": "验证工程",
+  "q": "monitor 为什么必须写成\"4 个采集进程 + 1 个派发进程\"？用 fork...join 汇合会怎样？",
+  "a": "因为 AXI 有 5 个独立握手的通道，不存在统一的\"事务边界\"可以一把抓。\n❌ 写成 fork...join 汇合 4 个 forever 进程 → 编译能过、仿真不报错、monitor 一个 item 都不发 → SB_SUMMARY 统计全是 0。最难查的一类\"假通过\"。\n✓ 正确结构：\n  fork\n    record_aw(); record_ar();        // 握手 → 缓存\n    collect_write(); collect_read();  // 完整事务 → 入队\n    dispatch();                       // ★ 唯一调用 ap.write 的地方\n  join\n★ 为什么 dispatch 要单独一个：保证所有 item 走同一条出口，tr_id 不会乱；tr_id 在 dispatch 里统一分配，monitor 和 driver 各自计数会对不上。"
+ },
+ {
+  "id": "veng-dm-2",
+  "note": "notes/验证工程/driver与monitor的实现要点.md",
+  "title": "验证工程 · driver与monitor的实现要点",
+  "cat": "验证工程",
+  "q": "monitor 采集写事务时，为什么必须等 B 响应才能把 item 发出去？AW/W 的顺序问题怎么处理？",
+  "a": "① 必须等 B：AXI 的 BRESP 才是\"这次写成功没有\"的唯一信息。不等 B → 拿不到 SLVERR/DECERR → scoreboard 误判这次写的响应。\n   写法：wait (m_aw_seen && m_w_seen); 然后 do @(posedge intf.cb); while (!(intf.cb.bvalid && bready));\n② AW/W 顺序：AXI4-Lite 允许任意顺序甚至同时，所以必须各用独立标志缓存（m_aw_seen / m_w_seen），在 record_aw() 里分别判断两个握手，收齐后再清标志。\n★ 采样时按方向分：TB 驱动的 awvalid/awaddr 直接读 intf，DUT 驱动的 awready 走 cb。"
+ },
+ {
+  "id": "veng-dm-3",
+  "note": "notes/验证工程/driver与monitor的实现要点.md",
+  "title": "验证工程 · driver与monitor的实现要点",
+  "cat": "验证工程",
+  "q": "为什么控制命令（比如场景间复位）必须挂在 seq_item 上，不能走 interface 信号或 driver 成员变量？",
+  "a": "因为 driver 只在 get_next_item() 返回后才会被唤醒去处理控制请求。任何\"旁路\"机制都会缺了\"唤醒\"或\"看见命令\"其中一半。\n实测三种旁路都失败：\n① interface 里加 bit rst_req → virtual interface 访问非 clocking 成员行为不可靠，driver 读不到\n② driver 加成员变量 rst_req → test 置了，但 driver 阻塞在 get_next_item()，没人唤醒它 → 死锁\n③ 裸调 sequencer.start_item() → 需要 sequence 上下文（grant 机制），报 HDL call sequence 错误\n★ item 是唯一解：get_next_item() 返回 = driver 被唤醒，命令和唤醒用同一个动作完成。"
+ },
+ {
+  "id": "veng-sb-1",
+  "note": "notes/验证工程/scoreboard参考模型.md",
+  "title": "验证工程 · scoreboard参考模型",
+  "cat": "验证工程",
+  "q": "影子模型为什么必须在 new() 里预置复位态寄存器？场景之间为什么要 reset_model()？",
+  "a": "① new() 里预置：影子模型要镜像 DUT 的【复位态】，而不只是运行到的那部分。否则\"复位后直接读\"会全部报 read without prior write，而这恰恰是最常见的第一个用例。常见误区是只把\"写过\"的寄存器放进去。\n② 场景间重置：不同场景对初值的假设不同（WSTRB 场景假设寄存器是 0，错误场景假设 FIFO 是空的）。不重置就互相污染。\n★★ 实测踩过：regress 报 16 个 mismatch，如 read addr=0x10 exp=0xffffffff got=0x12345678。第一反应是\"DUT 有 bug\"，实际是模型脏了。\n★ 判据：模型和 DUT 对不上时，先确认【两者都复位了】，再怀疑 RTL。顺序反了会白查几小时。"
+ },
+ {
+  "id": "veng-sb-2",
+  "note": "notes/验证工程/scoreboard参考模型.md",
+  "title": "验证工程 · scoreboard参考模型",
+  "cat": "验证工程",
+  "q": "AXI4-Lite 的 WSTRB 字节掩码在参考模型里怎么处理？漏了会是什么症状？",
+  "a": "写入的新值不是直接等于 wdata，而是按字节合并：new[i] = wstrb[i] ? wdata[i] : old[i]。\nfunction apply_strb(old_val, new_val, strb);\n  res = old_val;                      // ★ 先取旧值\n  for (int i = 0; i < STRB_W; i++)\n    if (strb[i]) res[i*8 +: 8] = new_val[i*8 +: 8];\n  return res;\nendfunction\n★ 漏了 WSTRB → 模型算错、DUT 是对的 → 表现为【随机地】报 mismatch（取决于写入数据和掩码的组合），极难定位。\n★ 放这函数在 global_pkg 里，AXI 家族都能直接抄。"
+ },
+ {
+  "id": "veng-sb-3",
+  "note": "notes/验证工程/scoreboard参考模型.md",
+  "title": "验证工程 · scoreboard参考模型",
+  "cat": "验证工程",
+  "q": "为什么读一个从未写过的寄存器只能报 warning 不能报 error？env_config 里嵌套 config 的那行 new() 为什么不能少？",
+  "a": "① 读未初始化寄存器：DUT 返回复位值 0 是【合法行为】。报 error 会让随机激励满屏假警报，反而掩盖真问题。正确做法：warning 提示 + 只在\"不是复位值 0\"时才报 error。判据是【模型只对它能确定的下断言】。\n② 嵌套 config 的 new()：只声明不 new 的话它保持 null；test 里写 env_cfg.agnt_cfg.is_active = ... 就是在解引用空句柄 → SIGSEGV，而栈顶显示在 uvm_config_db::get 里，完全指不到真正原因。\n★★ 用 new() 不用 type_id::create —— uvm_object 不走工厂。\n★ 这是全模板最容易漏的一行。"
+ },
+ {
+  "id": "veng-test-1",
+  "note": "notes/验证工程/test与场景编排.md",
+  "title": "验证工程 · test与场景编排",
+  "cat": "验证工程",
+  "q": "为什么 test 的 run_phase 里不能调 super.run_phase()？症状是什么？",
+  "a": "run_phase 是阻塞 task，它内部要等所有子进程跑完才返回。test 自己就是 run_phase 的执行者之一，在开头调 super.run_phase(phase) = 自己死等自己。\n症状：仿真在 Time: 0 就 $finish，一条 [SEQ] 日志都没有，driver 报 \"0 items driven\" —— 看起来像\"激励没跑起来\"。\n正确做法：一般直接不写（uvm_test 的默认实现是空的），建议显式 raise_objection / drop_objection。\n★★ 对比记忆：super.build_phase() 放【最后】，super.run_phase() 【根本不要写】。两个不同的坑。"
+ },
+ {
+  "id": "veng-test-2",
+  "note": "notes/验证工程/test与场景编排.md",
+  "title": "验证工程 · test与场景编排",
+  "cat": "验证工程",
+  "q": "场景之间为什么不能只靠 #delay 串联？正确的做法是什么？",
+  "a": "#(delay) 只保证\"过了一段时间\"，不保证 driver 已经 item_done()。\n实测症状：5 个场景【单跑全绿】，串进 regress 立刻死锁，拓扑里 num_last_reqs=1（driver 拿了 item 不归还）。\n正确做法用 run_seq_chain，四件事缺一不可：\n① reset_dut() 让 DUT 复位\n② env_i.scb.reset_model() 影子模型也要复位 ★\n③ start_seq(seq)\n④ #(500ns) 等 DUT 把所有响应收完（AXI 单笔最长 ~6 拍 = 60ns，给 10 倍余量）\n★ 注意不能裸调 sequencer.start_item() 来\"唤醒\"driver —— 需要 sequence 上下文（grant 机制），裸调报 HDL call sequence 错误。"
+ },
+ {
+  "id": "veng-test-3",
+  "note": "notes/验证工程/test与场景编排.md",
+  "title": "验证工程 · test与场景编排",
+  "cat": "验证工程",
+  "q": "一个合格的功能验证环境，激励场景应该分哪几类？为什么\"错误场景\"和\"字节掩码\"特别容易漏？",
+  "a": "五类：① 基本读写（每个可读写寄存器能写能读回）② 边界与错误（写只读/越界/空 FIFO）③ 字节掩码（部分字节写）④ 连续流（深度、状态位、顺序）⑤ 随机压测（corner case）。数量按\"RTL 有几个需单独验的功能点\"定，通常 5~15 个。\n★ 为什么②③容易漏：不专门构造就悄悄漏掉，而它们恰好是 bug 高发区。\n★ 实用判据：RTL 里凡是 if(err) / if(illegal) 的分支，都必须有对应激励打到它。可以用覆盖率 ignore_bins 检查有没有漏。\n★ 公共动作（do_write/do_read）上提到 base_seq，派生 seq 只写\"要验什么\"不碰协议细节。\n★★ 约束引用外层变量必须加 local:: 前缀，否则是恒真约束。"
+ },
+ {
+  "id": "veng-axi-1",
+  "note": "notes/验证工程/AXI4Lite实战复盘.md",
+  "title": "验证工程 · AXI4Lite实战复盘",
+  "cat": "验证工程",
+  "q": "这次 AXI4-Lite VIP 实战，RTL 侧抓到哪几个 bug？为什么它们\"读就近几行看不出来\"？",
+  "a": "三个，全部靠冒烟测试 10 分钟内定位：\n① FIFO 指针宽度写成 $clog2(FIFO_D) 而非 $clog2(FIFO_D):0 → 深度是 2 的幂时存不下 8，full 永不置位。【隐蔽在哪：深度 5 或 7 时一切正常，只有 2 的幂才暴露】\n② awready = ~do_write，而 do_write 是组合逻辑 → 沿上毛刺，TB 错过握手。改成显式状态机 WR_RECV/WR_EXEC/WR_WAITB。\n③ 标志清零放在各通道 else 分支 → do_write 组合出的 1 落在同一拍但赋给 aw_hs 的是下一拍的值，状态脱节。必须\"清标志+执行写+置bvalid\"在同一拍。\n★★ 教训：这些 bug 在 UVM 里会表现成\"VIP 写错了\"，白查几小时。先写冒烟测试的价值就在这。"
+ },
+ {
+  "id": "veng-axi-2",
+  "note": "notes/验证工程/AXI4Lite实战复盘.md",
+  "title": "验证工程 · AXI4Lite实战复盘",
+  "cat": "验证工程",
+  "q": "这次 AXI4-Lite VIP 的覆盖率建模里，哪两个 coverpoint 是核心？为什么？",
+  "a": "cp_err（错误场景）和 cp_strb（字节掩码）。\n★ cp_err 覆盖三类错误：写只读 → SLVERR、越界 → DECERR、空 FIFO 读 → SLVERR。它们在激励里不专门构造就会【悄悄漏掉】，而这些恰好是 RTL bug 高发区。\n★ cp_strb 覆盖四种掩码：全字节/低字节/高字节/中间两字节。AXI4-Lite 的部分字节写是最典型的 bug 源。\n其他 coverpoint（cp_op/cp_bresp/cp_rresp）比较常规。\n★ 最终 88.83%：未覆盖的 11% 主要是正常地址段和部分 cross 组合没专门激励。我选择如实留着而不是删 bin 凑好看—— 它是\"还有激励没写\"的诚实记录。\n★ 建模的对象是【验证点】，不是\"信号翻转了多少次\"。"
+ }
+,
+ {
+  "id": "veng-idx-1",
+  "note": "notes/验证工程/索引.md",
+  "title": "验证工程 · 索引",
+  "cat": "验证工程",
+  "q": "这套验证工程材料一共几篇？每天复习应该看哪一篇、为什么？",
+  "a": "共6 篇（索引 + 5 篇正文）。\n★ 每天只需要看一篇：【验证工程 · 骨架速记】。\n理由：那一页已经把【八股结构图 + 三级配置链 + 7 步搭建顺序 + 工作量分布 + 7 个静默失败】全压缩进去了，默念一遍就够在写验证时立刻架构出初始版本。\n其余五篇是它的展开，只在\"某一块忘了\"时才翻：\n· interface与协议封装 → 方向判定 / clocking 硬规矩 / 协议 task 骨架\n· driver与monitor的实现要点 → 4 行骨架 / 采集-派发分离 / 三个必错点\n· scoreboard参考模型 → 双口 imp_decl / 复位态预置 / WSTRB 合并\n· test与场景编排 → 相位死锁 / 5 类场景 / 复位握手\n· AXI4Lite实战复盘 → 一份真实 VIP 的完整过程 + 11 个实测坑\n★ 建议配合自测页的\"今日复习\"一起用。"
+ }
 ];
