@@ -688,5 +688,365 @@ window.QUIZ_QUESTIONS = [
   "cat": "UVM",
   "q": "写 reset 跳转时，`main_phase` 里为什么要用 `fork ... join_any` + `disable fork`？",
   "a": "为了让【主激励】和【盯 reset / 发起跳转】并行，同时又能在跳转时干净收场。\n· fork 出两条线程：① repeat(3) 的正常激励；② 满足条件时调用 phase.jump(uvm_reset_phase::get())；\n· join_any：任一分支结束就继续（不等另一条）；\n· disable fork：★ 把另一条还在跑的线程掐掉 —— 否则它会继续持 objection、继续打激励，跳转后行为就乱了。\n另外：jump 是域级操作，只应由【一个】协调者（专门的 reset 监听组件）发起，多个组件同时调会重复触发。\n实测（ts_sim/tb_phase_jump.sv）：两轮 reset→configure→main，一次 [PH_JUMP]，0 error 0 fatal；代码里 #1ns 在 jump 之前，那 1ns 是代码自己的等待，不是 jump 的延迟。"
- }
+ },
+ {
+ "id": "mstidx-1",
+ "note": "notes/基础面试题目/索引与答题策略.md",
+ "title": "面试题 · 索引与答题策略",
+ "cat": "基础面试题目",
+ "q": "面试答题的四段式是什么？为什么不能只给结论？",
+ "a": "① 先给结论（一句话，面试官问的就是这个）；② 再讲机制（\"为什么这样设计\"，体现理解原理不是背答案）；③ 补代码/表格（关键 3~5 行，别写一整页）；④ 最后补边界条件或坑（这步最能加分）。\n只给结论会被判定为\"背的\"；第 2 段证明你有体系认知；第 4 段往往才是拉开差距的地方。\n例：问 m_sequencer vs p_sequencer，只答\"p_sequencer 是宏声明的\"是背；答完类型/为什么不能直接访问/宏替你干了什么/转型失败要主动报错，才是懂。"
+},
+ {
+ "id": "mstidx-2",
+ "note": "notes/基础面试题目/索引与答题策略.md",
+ "title": "面试题 · 索引与答题策略",
+ "cat": "基础面试题目",
+ "q": "这套题库的推荐刷题顺序是什么？为什么把 UVM 那几篇放在最前？",
+ "a": "① UVM 平台与组件 → factory 与配置 → 相位与 objection → TLM 通信（先建\"平台怎么搭起来\"的框架，必须先通）；\n② UVM 序列与仲裁 + 寄存器模型 RAL（最大考点，实际工作中最常问）；\n③ SV 语言基础 + 覆盖率与断言（题最多、最易踩坑，务必自己敲一遍代码）；\n④ 数字电路与时序设计 + 总线协议（验证岗硬骨头，答不上来显得基础薄）；\n⑤ 项目与综合面 + 验证方法与流程（必须结合自己项目改写，纯背没用）。\n★ 项目类放最后是有意的：前四轮是\"能不能答\"，最后一轮是\"答得像不像你做过\"，前面没建立框架时背项目话术没有说服力。"
+},
+ {
+ "id": "mstidx-3",
+ "note": "notes/基础面试题目/索引与答题策略.md",
+ "title": "面试题 · 索引与答题策略",
+ "cat": "基础面试题目",
+ "q": "三类面试题（概念辨析 / 流程机制 / 项目软性）分别该怎么准备？",
+ "a": "· 概念辨析题（component vs object、get vs try_get、浅拷贝 vs 深拷贝）：做成【对比表】，只记差异项，不要背整段。\n· 流程机制题（握手、仲裁、build_phase 例化、RAL 集成）：记【步骤顺序】，要能默画出流程图，答时按 1-2-3 编号说。\n· 项目软性题（环境怎么搭、为什么转行）：写成【自己的话】，必须有具体数字（覆盖率 %、agent 数、发现几个 bug）和真实细节，纯背一眼就穿。\n判断标准：概念题答错是\"知识缺口\"，流程题答错是\"没理解\"，项目题答错是\"没参与\"。"
+},
+ {
+ "id": "mstplat-1",
+ "note": "notes/基础面试题目/UVM平台与组件.md",
+ "title": "面试题 · UVM 平台与组件",
+ "cat": "基础面试题目",
+ "q": "component 比 object 多出来的两点是什么？怎么快速判断一个 UVM 类属于哪一类？",
+ "a": "多出来的两点：① new 时指定 parent 参数，形成【树形结构】；② 有【phase 自动执行】机制。\n快速判断：有没有 phase 回调 / 能不能 new 出父子层次 → 是 component。\n· component：driver、monitor、sequencer、agent、scoreboard、reference model、test、env、phase\n· object：item/transaction、sequence、config、map、field、reg\n★ 最容易记混的是 phase 和 reg —— 它们是 object，不是 component。"
+},
+ {
+ "id": "mstplat-2",
+ "note": "notes/基础面试题目/UVM平台与组件.md",
+ "title": "面试题 · UVM 平台与组件",
+ "cat": "基础面试题目",
+ "q": "为什么必须有 monitor？直接让 driver 把数据发给 scoreboard 不行吗？",
+ "a": "两条理由，缺一条就丢分：\n① 协议理解分工：大型项目里 driver 按协议【发】、monitor 按同一协议【收】，若是不同人实现，能大幅减少任一方对协议理解的错误。\n② 代码复用：agent 被集成时某些场景只需要监测不需要激励（挂在输出端口上），配 is_active=UVM_PASSIVE 即可只例化 monitor —— 同一套 VIP 才能从模块级复用到 SoC 级。"
+},
+ {
+ "id": "mstplat-3",
+ "note": "notes/基础面试题目/UVM平台与组件.md",
+ "title": "面试题 · UVM 平台与组件",
+ "cat": "基础面试题目",
+ "q": "为什么必须在 build_phase 例化 component？如果在 new() 里例化会发生什么？",
+ "a": "因为 build_phase 是【top-down】：高层 env 的 build_phase 先跑，高层配置好之后低层才能建。所以低层 agent 在自己的 build_phase 里能直接 get() 到上层设的 is_active。\n若在 new() 里例化：new() 是在 type_id::create() 那一刻调用的，此时 env 的 build_phase 还没给 is_active 赋值 → 读到【默认值 UVM_ACTIVE】，配置完全失效。\n补救：改用 config_db 在 env.build_phase 里提前 set，再在 agent.new() 里 get。\n规律：component 一般在 build_phase 例化；object 可以在任何 phase 例化。"
+},
+ {
+ "id": "mstfac-1",
+ "note": "notes/基础面试题目/factory与配置机制.md",
+ "title": "面试题 · factory 与配置机制",
+ "cat": "基础面试题目",
+ "q": "factory 覆盖（override）成立的三个条件是什么？覆盖类能不能是原始类的父类？",
+ "a": "三个条件：① 原始类和覆盖类都必须在 factory 注册；② 原始类必须用 type_id::create() 实例化（不能 new()）；③ 覆盖方法必须在原始类对象【创建之前】调用。\n另外两条补充：覆盖类必须是原始类的【子类】，且被调方法在原始类里声明为 virtual（否则句柄转换会出错）。\n★ 覆盖类为原始类的【父类时会报错】—— 派生关系方向记牢：子类覆盖父类，不能反过来。"
+},
+ {
+ "id": "mstfac-2",
+ "note": "notes/基础面试题目/factory与配置机制.md",
+ "title": "面试题 · factory 与配置机制",
+ "cat": "基础面试题目",
+ "q": "uvm_config_db 和 uvm_resource_db 的核心区别是什么？\"parent wins\" 是什么优先级规则？",
+ "a": "config_db 继承自 resource_db。核心区别在同一条配置有多条写入时谁生效：\n· uvm_resource_db：last write wins，与层次无关。build_phase 自顶向下，低层次写入发生在最后 → 低层次反而成为有效数据，无法实现层次化覆盖，不利于集成复用。\n· uvm_config_db：parent wins（最高层次有效），同一层次内后写入有效。\n★ 具体优先级是 1000 - cntxt.get_depth()，取【数值最大】者 → 越靠近根越优先；同优先级时是【最后写的先】。\n附加：config_db 还支持 set_scope 通配（* ? .），resource_db 不支持。"
+},
+ {
+ "id": "mstfac-3",
+ "note": "notes/基础面试题目/factory与配置机制.md",
+ "title": "面试题 · factory 与配置机制",
+ "cat": "基础面试题目",
+ "q": "callback 和 factory override 都能\"改变组件行为\"，本质区别是什么？",
+ "a": "· factory override：【产生一个新的扩展类】替换原对象，对象类型变了。\n· callback：类还是原先的类，只是【类内部的 callback 函数】变了。\ncallback 使用四步：① 在组件中内嵌 callback 函数/任务；② 声明一个 uvm_callback 空壳类；③ 扩展空壳类；④ 用 uvm_register_cb 登记实例。\n典型用途：在 driver 把激励发到 DUT 之前注入错误（如翻转 CRC 的一位），而不改 driver 本身 —— 这是构造异常测试用例最干净的办法。"
+},
+ {
+ "id": "mstseq-1",
+ "note": "notes/基础面试题目/UVM序列与仲裁.md",
+ "title": "面试题 · UVM 序列与仲裁",
+ "cat": "基础面试题目",
+ "q": "为什么 start_item 和 finish_item 之间绝对不能加延迟？",
+ "a": "start_item 返回后，这个 sequence 就【赢得了仲裁】，可以访问 sequencer/driver。从那时到 finish_item 之间的任何延迟，都会让 sequencer/driver 【空转被占住】，不能被其他 sequence 使用。\n后果：其他 sequence 拿不到 driver，这个时间片全被浪费；在多 sequence 竞争时可能直接掩盖 bug 或造成超时。\n正确做法：把耗时逻辑放在 body() 里 start_item 之前，或者在 driver 侧用 fork...join_none 做流水线（pipeline）模式，而不是靠 body 里 delay 来错开。"
+},
+ {
+ "id": "mstseq-2",
+ "note": "notes/基础面试题目/UVM序列与仲裁.md",
+ "title": "面试题 · UVM 序列与仲裁",
+ "cat": "基础面试题目",
+ "q": "get() 和 get_next_item() 都能从 sequencer 拿 item，区别是什么？哪个需要 item_done()？",
+ "a": "· get()：阻塞、隐式完成握手 → 【不需要】显式调 item_done()。\n· get_next_item()：阻塞，取到后必须【显式】调 item_done() 才完成握手。\n· try_next_item()：非阻塞，没有可用 item 时返回空指针，成功后要 item_done()。\n· try_get()：非阻塞，同样隐式握手不用 item_done。\n· peek()：阻塞但【不消费】，只是复制一份。\n· put()：非阻塞。\n★ 面试常直接问\"下面哪段代码是错的\" —— 典型错法是在 item_done() 之前调了两次 get_next_item()，握手完不成。"
+},
+ {
+ "id": "mstseq-3",
+ "note": "notes/基础面试题目/UVM序列与仲裁.md",
+ "title": "面试题 · UVM 序列与仲裁",
+ "cat": "基础面试题目",
+ "q": "lock() 和 grab() 都能让 sequence 独占 sequencer，区别是什么？",
+ "a": "区别在于【请求放进仲裁队列的位置】：\n· lock()：请求和其他 sequence 的 transaction 请求【一起放到队列末尾】，等到它时前面的请求都已结束；拿到后 sequencer 一直发它的 item，直到 unlock()。是【阻塞】调用，要等更高优先级的 sequence 让路。\n· grab()：请求直接插到队列【最前面】，一发出就拥有所有权，【不考虑其他 sequence 的优先级】（除非已有人 lock/grab 了）。\n适用场景：施加一段定向激励，中途不能被打断（独占到所有 item 发完）。"
+},
+ {
+ "id": "mstseq-4",
+ "note": "notes/基础面试题目/UVM序列与仲裁.md",
+ "title": "面试题 · UVM 序列与仲裁",
+ "cat": "基础面试题目",
+ "q": "m_sequencer 和 p_sequencer 有什么区别？为什么需要 p_sequencer？",
+ "a": "· m_sequencer：sequence 的【成员变量】，类型 uvm_sequencer_base。sequence 挂到 sequencer 上时该句柄被赋值（向上转型，所以类型是父类）。\n问题：通过它【不能直接用】具体 sequencer 子类里定义的变量，编译报错，必须先 $cast 向下转型。\n· p_sequencer：用 `uvm_declare_p_sequencer(我的sequencer类) 宏声明的成员变量，指向指定子类类型，宏【自动完成 cast】，因此可以自由访问子类成员。\n★ 坑：手写 cast 时转型失败要主动 `uvm_fatal 报错，否则运行期是空 p_sequencer，访问成员时空引用崩掉。"
+},
+ {
+ "id": "msttlm-1",
+ "note": "notes/基础面试题目/TLM通信与端口.md",
+ "title": "面试题 · TLM 通信与端口",
+ "cat": "基础面试题目",
+ "q": "TLM 的 port / export / imp 有什么区别？能不能用 create() 创建？",
+ "a": "· port：通信请求的【发起端】\n· export：介于 port 与 imp 之间的中间层\n· imp：只能作为【接受请求的响应端】，无法扩展连接\n优先级 port > export > imp，只有优先级高的才能调 connect()：port 可连 export/imp，export 可连 export/imp，imp 是终点。\n★ 这三种端口【不是 uvm_component 的子类】，所以要用 new() 创建，【不能用 create()】（create 是 factory 的东西，只有注册过的 component/object 才用）。\n典型：driver.seq_item_port.connect(sequencer.seq_item_export)"
+},
+ {
+ "id": "msttlm-2",
+ "note": "notes/基础面试题目/TLM通信与端口.md",
+ "title": "面试题 · TLM 通信与端口",
+ "cat": "基础面试题目",
+ "q": "scoreboard 要同时接 monitor 和 reference model 的数据，就得定义两个 write，方法名怎么不冲突？",
+ "a": "两种解法：\n① 宏声明带后缀的端口：`uvm_analysis_imp_decl(_monitor) / (_model) → 生成 uvm_analysis_imp_monitor / _model，对应 write_monitor() / write_model()，方法名自然不同。\n② 【更常用】改用 uvm_tlm_analysis_fifo：它本质 = 一块缓存 + 两个 imp，自带 analysis_imp 端口和 write 函数。monitor 连 analysis_port 侧，scb 用 blocking_get_port 主动取。这样【scoreboard 里完全不用写 write 函数】，还顺带解决了两个来源数据撞在一起的处理问题。"
+},
+ {
+ "id": "msttlm-3",
+ "note": "notes/基础面试题目/TLM通信与端口.md",
+ "title": "面试题 · TLM 通信与端口",
+ "cat": "基础面试题目",
+ "q": "analysis_port 和 TLM port 的区别是什么？各自的典型使用场景？",
+ "a": "· TLM port / TLM FIFO：两个组件之间的【一对一】事务通信，用 put/get 建立通道。典型：driver ↔ sequencer。\n· analysis port / analysis FIFO：组件把事务【广播】到多个组件。典型：monitor → scoreboard / reference model。\nanalysis_port 的特点：可以不连接，也可连一个或多个 analysis_imp；【没有阻塞/非阻塞之分】；在 analysis_imp 所在 component 里必须定义一个 write 函数。\n记忆：一对一 → TLM port；一对多广播 → analysis port。"
+},
+ {
+ "id": "mstphs-1",
+ "note": "notes/基础面试题目/UVM相位与objection.md",
+ "title": "面试题 · UVM 相位与 objection",
+ "cat": "基础面试题目",
+ "q": "哪些 phase 是 top-down、bottom-up、parallel？为什么 build_phase 是 top-down？",
+ "a": "· build_phase：【top-down】自上而下\n· run_phase 等 task phase：【parallel】并行\n· 其余 function phase：【bottom-up】自下而上\n原因：低层组件要在高层组件的 build_phase 里被【例化】。如果高层的 build_phase 之前就执行 driver 的 build_phase，那时 driver 还没被例化，调用它的 build_phase 会报错。\nconnect_phase 是 bottom-up，因为它要在 build_phase 之后完成组件之间 TLM 连接，先把底层端口准备好。\n另外：兄弟关系的 component 的相同 phase 之间按【字典序】执行。"
+},
+ {
+ "id": "mstphs-2",
+ "note": "notes/基础面试题目/UVM相位与objection.md",
+ "title": "面试题 · UVM 相位与 objection",
+ "cat": "基础面试题目",
+ "q": "如果某个 phase 一个 objection 都没 raise，会发生什么？raise_objection 应该写在哪？",
+ "a": "· 一个 objection 都没提 → UVM 【直接跳到下一个 phase】，不是死等。这个行为很多人理解反了。\n· 都撤销了（计数从非零变零，\"all dropped\"）→ 关闭此 phase；所有 phase 执行完毕后调 $finish 关闭整个平台。\nraise_objection 的位置：必须在 main_phase 中【第一个消耗仿真时间的语句之前】。\n判断是否消耗时间：$display 不消耗时间；@(posedge clk)、#10ns、wait() 才消耗。"
+},
+ {
+ "id": "mstphs-3",
+ "note": "notes/基础面试题目/UVM相位与objection.md",
+ "title": "面试题 · UVM 相位与 objection",
+ "cat": "基础面试题目",
+ "q": "为什么需要 set_drain_time？它和 set_global_timeout 有什么不同？",
+ "a": "set_drain_time 解决【丢包】：DUT 处理数据需要时间，如果 sequence 发完最后一个 transaction 就 drop_objection，t 时刻之后 DUT 输出的包就【收不到了】。设了 drain_time 后，UVM 检测到所有 objection 撤销时，会先延迟 drain_time 再进 post_main_phase。\nset_global_timeout 解决【挂死】：把 uvm_top.phase_timeout 设为超时值，若 run_phase 在该超时前没结束就停止并报错。\nset_timeout 解决【死锁但时间还在走】：时间在消耗但进度停滞（如事件等不到、get 从空 mailbox 拿），超时给 uvm_fatal 并退出。\n记忆：drain_time 兜【尾部数据】，timeout 兜【时间不收敛】。"
+},
+ {
+ "id": "mstal-1",
+ "note": "notes/基础面试题目/寄存器模型RAL.md",
+ "title": "面试题 · 寄存器模型 RAL",
+ "cat": "基础面试题目",
+ "q": "update() 和 mirror() 方向分别是哪一边？为什么要有这两个方法？",
+ "a": "方向相反：\n· update()：把模型中的【期望值更新到 DUT】。先检查期望值与镜像值，不等则写入 DUT 并更新镜像值。\n· mirror()：【从 DUT 读取】寄存器值，检查与镜像值是否一致，不一致报错；再调 predict() 更新镜像值。\n为什么都要：update 用来【主动配置】DUT（保证 DUT 是我期望的状态），mirror 用来【被动确认】DUT 真实状态是不是模型以为的那样（发现别人偷偷改了寄存器）。\n另一个常用组合：先用 set() 设好期望值，再调 update() —— update 发现期望值≠镜像值时自动写入并同步。"
+},
+ {
+ "id": "mstal-2",
+ "note": "notes/基础面试题目/寄存器模型RAL.md",
+ "title": "面试题 · 寄存器模型 RAL",
+ "cat": "基础面试题目",
+ "q": "前门访问和后门访问的四个区别？什么 bug 只能用后门访问才能测出来？",
+ "a": "① 通路：前门要经【配置寄存器总线】；后门直接读写 DUT 内部寄存器，不经总线。\n② 时间：前门【消耗】仿真时间，后门不消耗。\n③ 只读寄存器：前门无法写，后门【可以】写进去。\n④ 波形可见性：前门操作在波形里【都有记录】；后门【找不到】，只能靠打印信息 → 增加调试难度。\n典型只有后门能测出的 bug：【寄存器地址映射错误】（如 A 的地址本该 0x10 实际映射到 0x20，B 反之）—— 单纯先写再读检测不出来。做法：前门配 A → 后门读 HDL 地址映射处的 A 变量看是否改变 → 再前门读 A 比对。"
+},
+ {
+ "id": "mstal-3",
+ "note": "notes/基础面试题目/寄存器模型RAL.md",
+ "title": "面试题 · 寄存器模型 RAL",
+ "cat": "基础面试题目",
+ "q": "集成寄存器模型时 build_phase 里那四步是什么？忘了会怎样？",
+ "a": "在 base_test 里依次调用：\n① rm.configure(...) —— 配置\n② rm.build(...) —— 例化所有寄存器\n③ rm.lock_model() —— 调用后寄存器模型中【不能再加入新的寄存器】\n④ rm.reset() —— 把所有寄存器的值设为复位值\n另外在 base_test 的 connect_phase 里，要用 set_sequencer() 把 adapter 和 bus_sequencer 告知 default_map，并把 default_map 设为自动猜测状态，不做这步前门访问跑不起来。\n★ 最常忘的是 ③ lock_model 的位置——放太早（还没例化完）会出问题，放太晚（后面还想加寄存器）就加不进去了。"
+},
+ {
+ "id": "mstsv-1",
+ "note": "notes/基础面试题目/SV语言基础.md",
+ "title": "面试题 · SV 语言基础",
+ "cat": "基础面试题目",
+ "q": "合并数组和非合并数组怎么区分？哪个在内存里连续？",
+ "a": "看维度写在【类型后面】还是【名字后面】：\n· 合并数组（packed）：bit[7:0] array[3:0] —— 定义在【类型后面、名字前面】，存储【连续】。32 位存不满不会另开空间。\n· 非合并数组（unpacked）：bit[7:0][3:0] array —— 定义在【名字后面】，存储【不连续】。每个元素单独占一段，即使某元素没被使用也会开辟空间。\n（标准叫法是 packed array / unpacked array，中文教材常叫合并/非合并。）"
+},
+ {
+ "id": "mstsv-2",
+ "note": "notes/基础面试题目/SV语言基础.md",
+ "title": "面试题 · SV 语言基础",
+ "cat": "基础面试题目",
+ "q": "$cast 查的是句柄类型还是对象类型？什么时候向下转型会失败？",
+ "a": "$cast 查的是【对象类型】。\n向上（子类句柄→父类句柄）：直接赋值【可以】，$cast 反倒会报错（父类句柄与子类句柄指向的是不同对象）。\n向下（父类句柄→子类句柄）：直接赋值和 $cast 都【不行】，因为 bc 真实对象是 base 不是 sub。只有【父类句柄指向子类对象】时，$cast 才成功：\n  sub_class s3 = new(); base_class bc2 = s3;  // 向上转型\n  $cast(s3, bc2);                          // ✓ 成功\n为什么向下要严查：子类比父类有更多属性，父类内存里根本没划那些空间，硬转会内存溢出。"
+},
+ {
+ "id": "mstsv-3",
+ "note": "notes/基础面试题目/SV语言基础.md",
+ "title": "面试题 · SV 语言基础",
+ "cat": "基础面试题目",
+ "q": "@ 和 wait() 的区别是什么？为什么同一 time slot 里 @ 和 -> 会竞争？",
+ "a": "· 触发敏感性：wait() 是【电平敏感】（括号里为 1 就触发）；@ 是【边沿敏感】（0→1 / 1→0 才触发）。\n· 次数：wait 只等【一次】；@ 每时每刻都在等。\n· 竞争：@ 会阻塞进程直到事件被 -> 触发才 unblock。如果 ->event 和 @event 发生在【同一个 time slot】，无法确定谁先执行 → 竞争冒险。\n解法：用 wait(event.triggered) —— event 的 triggered 属性持续【一个 time slot】，因此只要 wait 在同一 time slot 或之前执行就能等到。\n口诀：用 @ 搭配 -> 时必须先 @ 再 ->；用 wait 搭配时谁先谁后都可以。"
+},
+ {
+ "id": "mstsv-4",
+ "note": "notes/基础面试题目/SV语言基础.md",
+ "title": "面试题 · SV 语言基础",
+ "cat": "基础面试题目",
+ "q": "function 和 task 有什么区别？（最容易答漏的一条是什么）",
+ "a": "① 互相调用：function 能调 function 但【不能调 task】；task 能调 task 也能调 function。\n② 执行时刻：function 总在【仿真 0 时刻】开始执行，task 可在非零时刻。\n③ 时序控制：function 【一定不能】含延迟、事件或时序控制语句；task 可以。\n④ 变量：function 至少一个 input，【不能有 output/inout】；task 可有多个 input/output/inout。\n⑤ 返回值：function 只返回一个值；task 不返回值，通过 output/inout 传多个。\n★ 最容易漏答的是第 ③ 条（不能有时序控制）—— 面试官常专门追这一句。"
+},
+ {
+ "id": "mstsv-5",
+ "note": "notes/基础面试题目/SV语言基础.md",
+ "title": "面试题 · SV 语言基础",
+ "cat": "基础面试题目",
+ "q": "logic 和 wire 到底什么时候用？为什么 inout 端口不能定义成 logic？",
+ "a": "结论：【单驱动用 logic，多驱动用 wire。】\n· logic 是 reg 的改进：既能过程赋值也能连续赋值，编译器自动推断它是 reg 还是 wire。\n· logic 只允许【一个驱动】，不能多重驱动；如果接收了多个驱动，用 logic 【编译时就报错】。\n· inout 端口天然是多驱动（外部和内部都要驱动），所以不能定义为 logic。\n· 多驱动时用 wire（net 类型）。\n★ 答不出这条的，面试官会认为没写过真正能编译的多驱动 testbench。"
+},
+ {
+ "id": "mstcov-1",
+ "note": "notes/基础面试题目/覆盖率与断言.md",
+ "title": "面试题 · 覆盖率与断言",
+ "cat": "基础面试题目",
+ "q": "代码覆盖率低但功能覆盖率高，可能是什么原因？反过来呢？",
+ "a": "代码低 + 功能高：\n· A、covergroup 写得不完备，测试点分解也可能不完备\n· B、DUT 中有大量冗余代码\n代码高 + 功能低：\n· A、功能覆盖率的【采样有问题】——相关场景都打到了，但 covergroup 没采样到\n· B、covergroup 中的 cross bin 或 corner 点没覆盖到\n提高手段：新增约束 / 添加测试用例 / 用不同种子跑现有用例。覆盖率收集是【迭代过程】，要反复跑。"
+},
+ {
+ "id": "mstcov-2",
+ "note": "notes/基础面试题目/覆盖率与断言.md",
+ "title": "面试题 · 覆盖率与断言",
+ "cat": "基础面试题目",
+ "q": "ignore_bins 和 illegal_bins 有什么区别？采样到 illegal_bins 会怎样？",
+ "a": "· ignore_bins：忽略采样到的 bin，【不计入统计】（分母里没有它）。用来处理不可能/无意义的取值，免得白拉低覆盖率。\n· illegal_bins：如果采样到了这个非法 bin，仿真【会报 error】。用来断言\"这个值绝对不能出现\"。\n相关：binssof ... intersect 与 binsof 一般【与 intersect 连用】，构成 binsof(x) intersect(y)，表示覆盖点 x 与给定表达式 y 的交集，常用于 cross 筛选。\n★ 误区：ignore_bins 命中【不会】报错，报错的是 illegal_bins。"
+},
+ {
+ "id": "mstdc-1",
+ "note": "notes/基础面试题目/数字电路与时序设计.md",
+ "title": "面试题 · 数字电路与时序设计",
+ "cat": "基础面试题目",
+ "q": "多 bit 信号能跨时钟域打两拍吗？为什么？",
+ "a": "不能。只有【单 bit】信号能打两拍。\n原因：多 bit 数据的各个 bit 之间【路径延迟不一样】。源时钟域给的是 2'b11，目的时钟域采样到可能只有 2'b10（其中一个 bit 的延迟没赶上），打两拍也没法对齐和判断哪个是对的值。\n多 bit 的正确做法：格雷码（相邻只变 1 bit，但要求取值范围是满 2^n，如 3 bit 必须 0~7）、异步 FIFO、握手（DMX：用源域单 bit 信号判断是否已在目的域同步成功，成功则这段时间内多 bit 也能同步过来）、显式握手协议。"
+},
+ {
+ "id": "mstdc-2",
+ "note": "notes/基础面试题目/数字电路与时序设计.md",
+ "title": "面试题 · 数字电路与时序设计",
+ "cat": "基础面试题目",
+ "q": "阻塞赋值和非阻塞赋值的区别？为什么这么规定？",
+ "a": "· 阻塞 =：必须阻塞赋值完成后才执行下一条；赋值一旦完成左边【立即变化】；同一块中书写顺序【影响】结果；【硬件没有对应电路】。\n· 非阻塞 <=：赋值开始时算右边，【本仿真周期结束时】才更新左边；【不是立即生效】，允许块中其他语句同时执行；同一块中书写顺序【不影响】结果；【硬件有对应电路】。\n记忆：阻塞 = 串行 + 立即生效；非阻塞 = 并行 + 同时执行。\n规范：【组合逻辑用阻塞，时序逻辑用非阻塞】。答反了直接扣分——因为时序逻辑用阻塞会在时钟沿前后产生仿真与真实硬件不一致的竞争。"
+},
+ {
+ "id": "mstdc-3",
+ "note": "notes/基础面试题目/数字电路与时序设计.md",
+ "title": "面试题 · 数字电路与时序设计",
+ "cat": "基础面试题目",
+ "q": "异步复位有什么缺点？推荐的工程方案是什么？",
+ "a": "异步复位（always@(posedge CLK or negedge Rst_n)）的缺点：① 复位信号容易受毛刺干扰；② 【若复位释放刚好在时钟有效沿附近，寄存器输出很容易出现亚稳态】。\n推荐的工程方案：【异步复位、同步释放】—— 复位【到来】时不与时钟同步（保留异步复位响应快的优点），但复位【释放】时与时钟同步（避开亚稳态窗口）。\n另外要说清相关术语：恢复时间（recovery，撤销复位时非复位状态必须在时钟沿【之前】达到）和移除时间（removal，撤销复位后还要保持的时间）。\n★ 只答\"异步复位设计简单、省资源\"而不说亚稳态缺点，是不完整的答案。"
+},
+ {
+ "id": "mstdc-4",
+ "note": "notes/基础面试题目/数字电路与时序设计.md",
+ "title": "面试题 · 数字电路与时序设计",
+ "cat": "基础面试题目",
+ "q": "异步 FIFO 怎么判断空和满？为什么用格雷码？",
+ "a": "异步 FIFO 读写地址不同时钟域，不能直接比较，要先同步。空满判断：\n· 空：读写地址【完全相同】\n· 满：读写地址的【高 2 位不同、其余位均相同】\n（同步 FIFO 用二进制计数扩展一位：空=读写地址完全相同，满=最高位不同其余相同。）\n为什么用格雷码：格雷码【相邻只变 1 bit】，跨域同步时多位不会同时翻转，因此不会出现中间态，能避免亚稳态和采样错误。\n这是异步 FIFO 的核心设计点，也是面试高频追问。"
+},
+ {
+ "id": "mstver-1",
+ "note": "notes/基础面试题目/验证方法与流程.md",
+ "title": "面试题 · 验证方法与流程",
+ "cat": "基础面试题目",
+ "q": "测试点分解要满足哪几条原则？一个测试点和一个测试用例是什么关系？",
+ "a": "四条原则：\n· 完备性：不能遗漏任何功能点，特别是【异常处理、边界处理、容错处理】—— 这些最容易被忽视\n· 低耦合：不同测试点相关性甚低最好，直接决定分解粒度，影响 testcase 开发难度\n· 无歧义：描述直接明确，不同测试点之间不存在矛盾\n· 扩展性：包含异常和边界特性\n关系：\n· 一个测试用例【可以】覆盖多个测试点（考虑复杂度和时间的前提下尽量多覆盖）\n· 单个测试点在一个用例中【必须被覆盖】。若需要多个用例都通过后某个点才被覆盖，必定是【测试点分解太粗】，要重新细化\n总结：一个用例可含多个点；一个点不能被拆到多个用例（但一个点可以在多个用例中被包含）。"
+},
+ {
+ "id": "mstver-2",
+ "note": "notes/基础面试题目/验证方法与流程.md",
+ "title": "面试题 · 验证方法与流程",
+ "cat": "基础面试题目",
+ "q": "覆盖率没到 100% 怎么收敛？如果代码 95% 功能 80% 但 pass 100% 呢？",
+ "a": "通用方法三条：① 新增约束；② 添加测试用例；③ 用【不同的种子】跑现有用例。\n给定\"代码 95%、功能 80%、pass 100%\"，针对性做法：针对【RTL 代码没运行的部分】和【功能覆盖率没采样到的部分】写新用例，可以新增约束或用定向测试。\n条件覆盖率没到 100% 的定位法：先【查看覆盖率报告】定位到 RTL 代码中具体位置，看清条件表达式，再新增约束或定向测试让每个子表达式都能取到 true 和 false。—— 这个方法同样适用于\"怎么提高代码覆盖率\"：看到什么就覆盖什么。\n★ 关键是先看报告定位到行号，不要盲写用例。"
+},
+ {
+ "id": "mstver-3",
+ "note": "notes/基础面试题目/验证方法与流程.md",
+ "title": "面试题 · 验证方法与流程",
+ "cat": "基础面试题目",
+ "q": "验证不能检查出 DUT 的哪些问题？前仿能检查亚稳态吗？",
+ "a": "验证【检查不出】的：\n· 数据处理效率问题：例如 DUT 里可以插多个 FIFO 提高效率 —— 一个 buffer 处理完一个才能接下一个，两个 buffer 时第二个可以先存着，第一个处理完立刻切换。这种【性能差异在 RTL 功能仿真里看不出来】。\n· 建立保持时间、亚稳态、竞争冒险——都检查不到。\n前仿【不能】检查亚稳态。因为前仿是 RTL 级仿真，没有时序延时信息，而亚稳态本质是时序问题（违反建立/保持时间）。要看这类问题只能靠 STA（静态时序分析）或后仿（门级仿真，产生 SDF 文件）。"
+},
+ {
+ "id": "mstver-4",
+ "note": "notes/基础面试题目/验证方法与流程.md",
+ "title": "面试题 · 验证方法与流程",
+ "cat": "基础面试题目",
+ "q": "拿到一个项目后，验证活动的标准六步是什么？",
+ "a": "① 看 DUT 设计文档，弄清功能与接口时序，【提取功能点】\n② 画验证框图，展开底层组件\n③ 根据细化的功能点写测试用例：先写【一个】testcase 和一些基础 sequence，确保环境能跑通，再写其他\n④ 大规模随机测试，收集代码和功能覆盖率\n⑤ 查看覆盖率报告，分析未覆盖的部分，写【定向测试】+ 换种子继续跑\n⑥ 【回归测试】把所有用例再同时跑一遍，在极端情况下找出设计或验证环境的 bug\n⑦ 撰写验证报告，开会讨论、review\n★ 回答时必须结合自己项目：具体功能点有哪些、覆盖率各到多少、收集覆盖率的语句写在 testbench 的哪些组件中。"
+},
+ {
+ "id": "mstbus-1",
+ "note": "notes/基础面试题目/总线协议AHB_APB_AXI.md",
+ "title": "面试题 · 总线协议 AHB APB AXI",
+ "cat": "基础面试题目",
+ "q": "AXI 有哪五个通道？为什么没有独立的读响应通道？",
+ "a": "五个通道：\n· 读/写地址通道（ARADDR/AWADDR）：传输一次数据所需的地址和控制信息\n· 读数据通道（RDATA）：从机向主机返回读数据和读响应信息\n· 写数据通道（WDATA）：主机向从机传输写数据\n· 写响应通道（BRESP）：从机返回写响应信息\n（读地址+写地址算两个，写响应独立 ⇒ 共 5 个。）\n没有独立读响应通道的原因：读响应信息【RRESP 可以作为读数据通道的一部分传递】。\n★ 记忆：AXI 有独立的【写响应】通道，但【没有】独立的读响应通道。"
+},
+ {
+ "id": "mstbus-2",
+ "note": "notes/基础面试题目/总线协议AHB_APB_AXI.md",
+ "title": "面试题 · 总线协议 AHB APB AXI",
+ "cat": "基础面试题目",
+ "q": "AXI 为什么不许跨 4KB 边界？AHB 为什么不许跨 1KB 边界？",
+ "a": "AXI：slave 地址空间一般是 4KB 整数倍。AXI 在读/写地址通道的【开头】发出 addr/len/size，若一笔 burst 跨越 A 和 B 两个 slave，则【只有 A 收到】开头的 addr/len/size，B 收不到 → burst 无法完成。\nAHB：burst 不能跨 1KB 边界，slave 地址空间以 1KB 为单位，目的是让一个单独的 burst 不访问多个 slave。做法是在 1KB 边界处把 trans 改成【NON_SEQ】，重新发起一次 burst。\n★ 数字别记混：AXI 4K（低 12 bit 为 0），AHB 1K（低 10 bit 为 0）。"
+},
+ {
+ "id": "mstbus-3",
+ "note": "notes/基础面试题目/总线协议AHB_APB_AXI.md",
+ "title": "面试题 · 总线协议 AHB APB AXI",
+ "cat": "基础面试题目",
+ "q": "outstanding 和 out-of-order / interleaving 有什么区别？",
+ "a": "· outstanding：针对【地址】层面 —— 一次 burst 还没结束，就可以发送下一个 burst 的地址，大幅提高处理 transaction 的效率。主机在没收到 response 时能发起多笔 transaction 的能力。\n· out-of-order：针对【transaction】 —— 发送 transaction 和接收 cmd 之间的顺序无关。如先接 A 的 cmd 再接 B 的 cmd，可以先发 B 的 data 再发 A 的 data。\n· interleaving：也是 transaction 层面 —— A 和 B 的 data 可以交错：A1 B1 A2 B2 B3……但【同一个事务内部的各数据必须按顺序】，不能出现 A1 B2 A2 B1。\n规则：ID 相同的 transaction 必须顺序完成；ID 不同才可以乱序。"
+},
+ {
+ "id": "mstbus-4",
+ "note": "notes/基础面试题目/总线协议AHB_APB_AXI.md",
+ "title": "面试题 · 总线协议 AHB APB AXI",
+ "cat": "基础面试题目",
+ "q": "AXI3 和 AXI4 的主要区别是什么？AXI4 为什么取消 WID？",
+ "a": "主要区别：\n· burst length 最大值：AXI3 是【16】，AXI4 是【256】\n· WID：AXI3【有】，AXI4【取消】\n· 写通道：AXI3 支持 out-of-order 和 interleave；AXI4 所有写数据【全部有序】\n· AxQoS：AXI4 【新增】的用户服务质量信号\n取消 WID 的目的：避免乱序带来的【死锁问题】和【严重的 buffer 资源浪费】。\n本质上是 AXI4 用「牺牲乱序能力」换取「更简单、更省资源、可预测」的设计。"
+},
+ {
+ "id": "mstproj-1",
+ "note": "notes/基础面试题目/项目与综合面.md",
+ "title": "面试题 · 项目与综合面",
+ "cat": "基础面试题目",
+ "q": "面试官问\"你的验证环境怎么搭的\"，他在确认哪四件事？",
+ "a": "① 你懂不懂这个 IP 的功能（有没有真读过规格）\n② 功能点怎么变成测试点（有没有方法论）\n③ 遇到问题能不能 debug（有没有真干过）\n④ 结果如何（覆盖率、发现了什么 bug）\n只答第 4 层（\"我搭了个 UVM 环境跑通了\"）拿不到分。\n答题骨架：项目背景 → 读文档提取了哪些功能点 → 环境架构（几个 agent、scb 怎么比）→ 用了哪些 UVM 特性 → 遇到的问题和解决 → 最终覆盖率 % 和发现的 bug 数。\n★ 关键是必须带【具体数字】。"
+},
+ {
+ "id": "mstproj-2",
+ "note": "notes/基础面试题目/项目与综合面.md",
+ "title": "面试题 · 项目与综合面",
+ "cat": "基础面试题目",
+ "q": "\"为什么选择验证岗位/为什么转行\"怎么答才稳？",
+ "a": "四条按「行业→兴趣→性格→待遇」排：\n① 行业前景：芯片国产替代是大势所趋，IC 发展前景更广阔\n② 喜欢工作内容：验证要理解设计、提取功能点、搭环境、大规模随机测试、debug、回归迭代、收覆盖率，整个过程很有成就感，尤其环境跑通的时候\n③ 性格适合：不太喜欢社交，喜欢一门心思搞技术、喜欢钻研；验证工作量大繁琐，要求细心耐心、不急躁\n④ 待遇：IC 薪资高于行业平均\n★ 第 ④ 条【慎说或不说】—— 很多面试官会觉得\"你只是为钱\"。可改成\"希望在有技术含量的方向上长期深耕\"。\n★ 通用禁忌：别说\"验证轻松/不用写代码\"，这会直接暴露没干过。"
+},
+ {
+ "id": "mstproj-3",
+ "note": "notes/基础面试题目/项目与综合面.md",
+ "title": "面试题 · 项目与综合面",
+ "cat": "基础面试题目",
+ "q": "介绍项目里的一个 DUT bug，怎么答才显得有分析能力？",
+ "a": "框架：现象 → 定位过程 → 结论（谁的 bug）→ 怎么修。\n范例：UART —— 设计里没有给寄存器做复位操作。通过\"复位之后的读写测试\"发现：复位之后读出来的值不对，补不出 0。\n定位过程：前门写→前门读比对 → 发现读值是旧值 → 用【后门 peek】确认模型侧值正确 → 排除验证环境问题 → 交给设计。\n★ 要点：① 必须说清【怎么定位到 RTL 而不是环境】；② 能举出\"用后门排除验证环境\"这类手段最好；③ 教训要带一句——\"先写再读这种测试发现不了地址映射错误，必须前门+后门结合\"。"
+},
+ {
+ "id": "mstproj-4",
+ "note": "notes/基础面试题目/项目与综合面.md",
+ "title": "面试题 · 项目与综合面",
+ "cat": "基础面试题目",
+ "q": "scoreboard 到底怎么写的？怎么比较数据的？",
+ "a": "四步：\n① 数据从哪来：monitor → analysis_port → scb 的 analysis_imp；reference model 自己产生期望值\n② 比什么：逐字段比（address/data/len），或用 field_automation 的 compare\n③ 怎么处理顺序：队列/fifo 按【时间戳】对齐，或用 uvm_event/mailbox 同步\n④ 不一致时：$error 打印不一致字段 + transaction 快照，然后从波形定位到对应时间段\n加分点：说明为什么要加时间戳字段 —— 因为 driver 发出和 monitor 采回之间有延迟，没有时间戳就没法严格配对。\n★ 只说\"用队列比一下\"是不够的，要说清【期望值从哪来、怎么配对、失败怎么定位】。"
+}
 ];
