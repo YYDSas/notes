@@ -1209,6 +1209,38 @@ window.QUIZ_QUESTIONS = [
   "title": "验证工程 · 索引",
   "cat": "验证工程",
   "q": "这套验证工程材料一共几篇？每天复习应该看哪一篇、为什么？",
-  "a": "共6 篇（索引 + 5 篇正文）。\n★ 每天只需要看一篇：【验证工程 · 骨架速记】。\n理由：那一页已经把【八股结构图 + 三级配置链 + 7 步搭建顺序 + 工作量分布 + 7 个静默失败】全压缩进去了，默念一遍就够在写验证时立刻架构出初始版本。\n其余五篇是它的展开，只在\"某一块忘了\"时才翻：\n· interface与协议封装 → 方向判定 / clocking 硬规矩 / 协议 task 骨架\n· driver与monitor的实现要点 → 4 行骨架 / 采集-派发分离 / 三个必错点\n· scoreboard参考模型 → 双口 imp_decl / 复位态预置 / WSTRB 合并\n· test与场景编排 → 相位死锁 / 5 类场景 / 复位握手\n· AXI4Lite实战复盘 → 一份真实 VIP 的完整过程 + 11 个实测坑\n★ 建议配合自测页的\"今日复习\"一起用。"
+  "a": "共7 篇（索引 + 6 篇正文）。\n★ 每天只需要看一篇：【验证工程 · 骨架速记】。\n理由：那一页已经把【八股结构图 + 三级配置链 + 7 步搭建顺序 + 工作量分布 + 7 个静默失败】全压缩进去了，默念一遍就够在写验证时立刻架构出初始版本。\n其余六篇是它的展开，只在\"某一块忘了\"时才翻：\n· interface与协议封装 → 方向判定 / clocking 硬规矩 / 协议 task 骨架\n· driver与monitor的实现要点 → 4 行骨架 / 采集-派发分离 / 三个必错点\n· scoreboard参考模型 → 双口 imp_decl / 复位态预置 / WSTRB 合并\n· test与场景编排 → 相位死锁 / 5 类场景 / 复位握手\n· AXI4Lite实战复盘 → 一份真实 VIP 的完整过程 + 11 个实测坑\n· DPI-C 与 Python 脚本 → 进程边界：DPI 声明与链路 / Python 三条路线 / 回归脚本\n★ 建议配合自测页的\"今日复习\"一起用。"
+ },
+ {
+  "id": "dpipy-1",
+  "note": "notes/验证工程/DPI-C与Python脚本.md",
+  "title": "验证工程 · DPI-C 与 Python 脚本",
+  "cat": "验证工程",
+  "q": "`import \"DPI-C\" function` 与 `import \"DPI-C\" context task` 差在哪？什么时候必须用后者？",
+  "a": "差别是【能不能碰仿真器内部】：\n· 普通 function：只能收发参数做纯计算，碰不到 SV 层次（读不到 tb.dut.sig）\n· pure function：同上，额外承诺无副作用，仿真器可缓存/重排\n· context：能访问层次、能调 $display、能用 svGetScope，代价是切上下文开销大\n· context task：在上面全部基础上，还能【调用 SV 的 task】\n★ 必须用 context task 的唯一场景：C 侧要回调 SV 的 task。写成 function 会 Fatal 报 vsim-3757（exported task must be called from a context imported task）—— 根因是 SV 语法本身规定 function 里不许调 task，与仿真器无关。\n★ 口诀：pure=我保证不改东西；context=我要摸内部；都不写=我只算数。"
+ },
+ {
+  "id": "dpipy-2",
+  "note": "notes/验证工程/DPI-C与Python脚本.md",
+  "title": "验证工程 · DPI-C 与 Python 脚本",
+  "cat": "验证工程",
+  "q": "为什么 Python 参考模型通常不嵌进仿真进程，而是放到仿真之后跑？判断标准是什么？",
+  "a": "判断标准只有一条：这件事需不需要【跟着时钟走】。需要→留进程内；不需要→搬出去。\n★ 放进程外的四个理由：\n① 每次跨语言调用都要切上下文，逐笔事务调用性能塌方\n② 嵌入式解释器要处理 Py_Initialize / GIL / sys.path，调试极难，崩了没有调用栈\n③ Python 侧可以单独跑、单独测、单独 debug；SV 里的模型只能靠重跑仿真验证\n④ 后处理不改变仿真行为，结果可复现，还能用 numpy/pandas 批量算\n★ 标准分工：进程内做结构检查（协议合法性、X 传播、位宽），进程外做数值比对（期望值）。\n★ 三条路线优先级是反的：进程外 > socket/文件桥接 > 嵌入解释器。九成用途都在进程外。"
+ },
+ {
+  "id": "dpipy-3",
+  "note": "notes/验证工程/DPI-C与Python脚本.md",
+  "title": "验证工程 · DPI-C 与 Python 脚本",
+  "cat": "验证工程",
+  "q": "并行回归脚本里，每个用例至少必须记录哪两样东西？为什么少了就不算跑过？",
+  "a": "【test 名 + -sv_seed 种子值】。\n★ 随机验证里，没有种子的失败等于没失败——因为它不可复现。你只能反复重跑碰运气，而随机激励的失败往往几千分之一。\n★ 工程做法：log 文件名就带上两者（如 rand_test_s17.log），triage 时直接按文件名+seed 复跑。\n★ 另外两个易漏点：\n① vsim 从【当前工作目录】找 work 库，脚本要在编译目录下运行\n② 并行度别只看 CPU——Questa 的 license 数通常先成为瓶颈\n★ 完整的失败信息还应包含代码/编译库版本，否则换了 RTL 再跑同一个 seed 也不是同一件事。"
+ },
+ {
+  "id": "dpipy-4",
+  "note": "notes/验证工程/DPI-C与Python脚本.md",
+  "title": "验证工程 · DPI-C 与 Python 脚本",
+  "cat": "验证工程",
+  "q": "覆盖率数据交给脚本统计时，为什么不建议直接解析 `vcover report` 的文本输出？更好的做法是什么？",
+  "a": "因为 vcover 的列格式【随 Questa 版本和选项变化】，用正则硬啃列位置，换个版本就静默解析错（还可能不报错，只是数值全错）。\n★ 更稳的做法：让 TB 打印【你自己定义的格式】，脚本只解析自己定的协议。\n在 report_phase 里：$display(\"COV|%s|%0.2f\", \"cg_pkt\", cg_pkt.get_coverage());\nPython 侧：re.findall(r\"COV\\|(\\w+)\\|([\\d.]+)\", log)\n★ 三个好处：格式自己定、可以带时间点看到【收敛曲线】而不只是终值、换仿真器不用改脚本。\n★ ucdb 合并仍用工具本身：vcover merge total.ucdb cov_*.ucdb。"
  }
 ];
